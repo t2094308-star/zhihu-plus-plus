@@ -286,7 +286,7 @@ fun QuestionScreen(
     )
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().then(swipeToSearchModifier),
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             Box(Modifier.then(questionGlassPanel)) {
                 QuestionTopBar(
@@ -326,6 +326,7 @@ fun QuestionScreen(
                     // 这样列表视口占满整屏、正文会从顶栏下方滚过被玻璃采样到喵。
                     .padding(bottom = innerPadding.calculateBottomPadding())
                     .then(pageGlassSource)
+                    .then(swipeToSearchModifier)
                     .pageTurnViewportWithGuide(pageTurnTarget)
                     .testTag(QUESTION_SCREEN_LIST_TAG),
                 contentPadding = PaddingValues(

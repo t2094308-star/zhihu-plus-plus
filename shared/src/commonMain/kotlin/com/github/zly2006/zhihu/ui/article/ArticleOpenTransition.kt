@@ -51,7 +51,7 @@ const val MIN_ARTICLE_OPEN_TRANSITION_SPEED = 0.5f
 const val MAX_ARTICLE_OPEN_TRANSITION_SPEED = 2f
 
 /** 1.0x 对应的动画时长喵。 */
-private const val BASE_ARTICLE_OPEN_TRANSITION_MILLIS = 520
+private const val BASE_ARTICLE_OPEN_TRANSITION_MILLIS = 820
 
 /** 回答之间切换沿用既有时长，不受上浮转场的速度设置影响喵。 */
 private const val ARTICLE_ANSWER_SWITCH_TRANSITION_MILLIS = 300
