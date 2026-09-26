@@ -27,9 +27,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +76,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,6 +90,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -138,6 +137,7 @@ import com.github.zly2006.zhihu.viewmodel.feed.QuestionFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.sharedArticleAnswerSwitchState
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** 右滑进搜索允许的倾角容错：水平线 ±30°喵。 */
@@ -269,149 +269,169 @@ fun QuestionScreen(
     // 从右往左滑进入搜索：用水平方向的 draggable，它自带方向锁、只在水平轴响应，
     // 不会抢列表的垂直滚动；阈值取屏幕的三分之一宽：半屏在手机上约 540 像素，容易滑不到而感觉"完全没反应"，三分之一既能防误触也够得着喵。
     val swipeToSearchThresholdPx = LocalWindowInfo.current.containerSize.width / 3f
-    var swipeToSearchDraggedLeft by remember { mutableFloatStateOf(0f) }
-    val swipeToSearchState = rememberDraggableState { delta ->
-        swipeToSearchDraggedLeft += delta
-    }
-    val swipeToSearchModifier = Modifier.draggable(
-        state = swipeToSearchState,
-        orientation = Orientation.Horizontal,
-        onDragStarted = { swipeToSearchDraggedLeft = 0f },
-        onDragStopped = {
-            if (swipeToSearchDraggedLeft <= -swipeToSearchThresholdPx) {
-                navigator.onNavigate(Search(query = ""))
-            }
-            swipeToSearchDraggedLeft = 0f
-        },
-    )
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            Box(Modifier.then(questionGlassPanel)) {
-                QuestionTopBar(
-                    title = title,
-                    showTitle = showTopBarTitle,
-                    onNavigateBack = navigator.onNavigateBack,
-                    onOpenLog = {
-                        try {
-                            openZhihuWebUrl("https://www.zhihu.com/question/${question.questionId}/log")
-                        } catch (e: Exception) {
-                            userMessages.showShortMessage("打开日志失败: ${e.message}")
-                        }
-                    },
-                    onShare = {
-                        if (shareText != null) {
-                            handleShareAction(question, settings, executeShareAction) { showShareDialog = true }
-                        }
-                    },
-                    canShare = shareText != null,
-                    glassEnabled = glassSettings != null,
-                )
-            }
-        },
-    ) { innerPadding ->
-        FeedPullToRefresh(
-            viewModel,
-            padding = PaddingValues(top = innerPadding.calculateTopPadding()),
-        ) {
-            PaginatedList(
-                items = viewModel.displayItems,
-                onLoadMore = { viewModel.loadMore(paginationEnvironment) },
-                isEnd = { viewModel.isEnd },
-                key = { it.stableKey },
-                listState = listState,
-                modifier = Modifier
-                    // 玻璃顶栏浮在内容之上：顶部留白挪到 contentPadding 里，
-                    // 这样列表视口占满整屏、正文会从顶栏下方滚过被玻璃采样到喵。
-                    .padding(bottom = innerPadding.calculateBottomPadding())
-                    .then(pageGlassSource)
-                    .then(swipeToSearchModifier)
-                    .pageTurnViewportWithGuide(pageTurnTarget)
-                    .testTag(QUESTION_SCREEN_LIST_TAG),
-                contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding(),
-                    bottom = readingPlayerOverlayPadding,
-                ),
-                footer = ProgressIndicatorFooter,
-                topContent = {
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            QuestionHeaderSection(
-                                title = title,
-                                visitCount = visitCount,
-                                commentCount = commentCount,
-                                followerCount = followerCount,
-                                onShowComments = { showComments = true },
-                            )
-                            if (isQuestionLoaded) {
-                                QuestionAnimatedBodyHeader(
-                                    questionId = question.questionId,
-                                    questionContent = questionContent,
-                                    questionContentPlainText = questionContentPlainText,
-                                    topics = topics,
-                                    onTopicClick = { topic -> navigator.onNavigate(Topic(topic.id, topic.name)) },
-                                    isExpanded = isQuestionDetailExpanded,
-                                    onToggleExpanded = { isQuestionDetailExpanded = !isQuestionDetailExpanded },
-                                    isFollowing = isFollowing,
-                                    onFollowClick = {
-                                        scope.launch {
-                                            val nextFollowing = !isFollowing
-                                            viewModel.followQuestion(paginationEnvironment, nextFollowing)
-                                            isFollowing = nextFollowing
-                                            followerCount = (followerCount + if (isFollowing) 1 else -1).coerceAtLeast(0)
-                                            userMessages.showShortMessage(if (isFollowing) "已关注问题" else "已取消关注问题")
-                                        }
-                                    },
-                                    onWriteAnswerClick = {
-                                        navigator.onNavigate(
-                                            WriteAnswer(
-                                                questionId = question.questionId,
-                                                questionTitle = title,
-                                                questionDetail = questionContent,
-                                            ),
-                                        )
-                                    },
-                                    answerCount = answerCount,
-                                    currentSort = viewModel.sortOrder,
-                                    onSortChange = { sortOrder ->
-                                        viewModel.updateSortOrder(sortOrder)
-                                        viewModel.refresh(paginationEnvironment)
-                                    },
-                                )
-                            }
-                        }
+    // 从右往左滑进入搜索。
+    // 关键是要抢在列表的滚动容器之前拿到事件：Compose 的事件由内往外传，
+    // 挂在列表外层的手势永远排在它的滚动之后，所以这里只在 Initial pass 观察，
+    // 一旦确认这次拖动是水平的就立刻消费掉，列表便不会把它当成上下滚动喵。
+    val swipeToSearchModifier = Modifier.pointerInput(Unit) {
+        awaitPointerEventScope {
+            val touchSlop = viewConfiguration.touchSlop
+            while (true) {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                var totalX = 0f
+                var totalY = 0f
+                var claimed = false
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                    val delta = change.position - change.previousPosition
+                    totalX += delta.x
+                    totalY += delta.y
+                    if (!claimed && abs(totalX) > touchSlop && abs(totalX) > abs(totalY)) {
+                        claimed = true
                     }
-                },
-            ) { item ->
-                FeedCard(
-                    item = item,
-                    readingQueueSourceId = answerReadingQueueSourceId,
-                    modifier = Modifier.testTag("question_feed_item_${item.stableKey}"),
-                ) { _, destination ->
-                    answerSwitchState.pendingNavigator = viewModel.createAnswerNavigatorFor(item, paginationEnvironment)
-                    destination?.let(navigator.onNavigate)
+                    if (claimed) {
+                        change.consume()
+                    }
+                }
+                if (claimed && totalX <= -swipeToSearchThresholdPx) {
+                    navigator.onNavigate(Search(query = ""))
                 }
             }
         }
     }
-    CommentScreenComponent(
-        showComments = showComments,
-        onDismiss = { showComments = false },
-        content = question,
-    )
 
-    // 分享对话框
-    if (shareText != null) {
-        ShareDialog(
+    // 手势挂在最外层：列表的滚动容器在同层会先拿到事件，只在里面挂手势抢不到水平方向喵。
+    Box(Modifier.fillMaxSize().then(swipeToSearchModifier)) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                Box(Modifier.then(questionGlassPanel)) {
+                    QuestionTopBar(
+                        title = title,
+                        showTitle = showTopBarTitle,
+                        onNavigateBack = navigator.onNavigateBack,
+                        onOpenLog = {
+                            try {
+                                openZhihuWebUrl("https://www.zhihu.com/question/${question.questionId}/log")
+                            } catch (e: Exception) {
+                                userMessages.showShortMessage("打开日志失败: ${e.message}")
+                            }
+                        },
+                        onShare = {
+                            if (shareText != null) {
+                                handleShareAction(question, settings, executeShareAction) { showShareDialog = true }
+                            }
+                        },
+                        canShare = shareText != null,
+                        glassEnabled = glassSettings != null,
+                    )
+                }
+            },
+        ) { innerPadding ->
+            FeedPullToRefresh(
+                viewModel,
+                padding = PaddingValues(top = innerPadding.calculateTopPadding()),
+            ) {
+                PaginatedList(
+                    items = viewModel.displayItems,
+                    onLoadMore = { viewModel.loadMore(paginationEnvironment) },
+                    isEnd = { viewModel.isEnd },
+                    key = { it.stableKey },
+                    listState = listState,
+                    modifier = Modifier
+                        // 玻璃顶栏浮在内容之上：顶部留白挪到 contentPadding 里，
+                        // 这样列表视口占满整屏、正文会从顶栏下方滚过被玻璃采样到喵。
+                        .padding(bottom = innerPadding.calculateBottomPadding())
+                        .then(pageGlassSource)
+                        .then(swipeToSearchModifier)
+                        .pageTurnViewportWithGuide(pageTurnTarget)
+                        .testTag(QUESTION_SCREEN_LIST_TAG),
+                    contentPadding = PaddingValues(
+                        top = innerPadding.calculateTopPadding(),
+                        bottom = readingPlayerOverlayPadding,
+                    ),
+                    footer = ProgressIndicatorFooter,
+                    topContent = {
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                QuestionHeaderSection(
+                                    title = title,
+                                    visitCount = visitCount,
+                                    commentCount = commentCount,
+                                    followerCount = followerCount,
+                                    onShowComments = { showComments = true },
+                                )
+                                if (isQuestionLoaded) {
+                                    QuestionAnimatedBodyHeader(
+                                        questionId = question.questionId,
+                                        questionContent = questionContent,
+                                        questionContentPlainText = questionContentPlainText,
+                                        topics = topics,
+                                        onTopicClick = { topic -> navigator.onNavigate(Topic(topic.id, topic.name)) },
+                                        isExpanded = isQuestionDetailExpanded,
+                                        onToggleExpanded = { isQuestionDetailExpanded = !isQuestionDetailExpanded },
+                                        isFollowing = isFollowing,
+                                        onFollowClick = {
+                                            scope.launch {
+                                                val nextFollowing = !isFollowing
+                                                viewModel.followQuestion(paginationEnvironment, nextFollowing)
+                                                isFollowing = nextFollowing
+                                                followerCount = (followerCount + if (isFollowing) 1 else -1).coerceAtLeast(0)
+                                                userMessages.showShortMessage(if (isFollowing) "已关注问题" else "已取消关注问题")
+                                            }
+                                        },
+                                        onWriteAnswerClick = {
+                                            navigator.onNavigate(
+                                                WriteAnswer(
+                                                    questionId = question.questionId,
+                                                    questionTitle = title,
+                                                    questionDetail = questionContent,
+                                                ),
+                                            )
+                                        },
+                                        answerCount = answerCount,
+                                        currentSort = viewModel.sortOrder,
+                                        onSortChange = { sortOrder ->
+                                            viewModel.updateSortOrder(sortOrder)
+                                            viewModel.refresh(paginationEnvironment)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    },
+                ) { item ->
+                    FeedCard(
+                        item = item,
+                        readingQueueSourceId = answerReadingQueueSourceId,
+                        modifier = Modifier.testTag("question_feed_item_${item.stableKey}"),
+                    ) { _, destination ->
+                        answerSwitchState.pendingNavigator = viewModel.createAnswerNavigatorFor(item, paginationEnvironment)
+                        destination?.let(navigator.onNavigate)
+                    }
+                }
+            }
+        }
+        CommentScreenComponent(
+            showComments = showComments,
+            onDismiss = { showComments = false },
             content = question,
-            shareText = shareText,
-            showDialog = showShareDialog,
-            onDismissRequest = { showShareDialog = false },
         )
+
+        // 分享对话框
+        if (shareText != null) {
+            ShareDialog(
+                content = question,
+                shareText = shareText,
+                showDialog = showShareDialog,
+                onDismissRequest = { showShareDialog = false },
+            )
+        }
     }
 }
 
