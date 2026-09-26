@@ -67,6 +67,10 @@ android {
         create("full") {
             dimension = "version"
             buildConfigField("boolean", "IS_LITE", "false")
+            // ".mod" 让魔改版与官方包共存喵。后缀刻意不以 ".lite" 结尾：
+            // AndroidPlatformCapabilities 用 endsWith(".lite") 判断 lite 变体，
+            // full 版若以它结尾会被当成 lite，更新检查和首页入口都会走错分支喵。
+            applicationIdSuffix = ".mod"
         }
         create("lite") {
             dimension = "version"
