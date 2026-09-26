@@ -694,7 +694,7 @@ fun ArticleScreen(
                                     modifier = Modifier
                                         // 玻璃模式下容器不铺不透明底色，改用胶囊玻璃；投票状态由内部按钮颜色表达喵。
                                         .then(if (glassSettings != null) pillGlassPanel else Modifier)
-                                        .padding(8.dp),
+                                        .padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     AnimatedVisibility(
@@ -799,7 +799,7 @@ fun ArticleScreen(
                                     modifier = Modifier
                                         // 容器不再裁剪：按压缩放会让子项短暂超出边界，裁掉就会看到被切平的边缘喵。
                                         .then(if (glassSettings != null) pillGlassPanel else Modifier)
-                                        .padding(end = 12.dp),
+                                        .padding(end = 20.dp),
                                     horizontalArrangement = Arrangement.End,
                                 ) {
                                     IconButton(
