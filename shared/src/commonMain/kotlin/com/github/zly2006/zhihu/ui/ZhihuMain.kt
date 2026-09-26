@@ -569,6 +569,7 @@ fun ZhihuMain(
                     typeMap = mapOf(typeOf<ArticleType>() to ArticleTypeNavType),
                     enterTransition = articleEnterTransition,
                     exitTransition = articleExitTransition,
+                    popExitTransition = articleExitTransition,
                 ) { entry ->
                     articleContent(entry.toRoute(), entry)
                 }
@@ -801,6 +802,7 @@ fun ZhihuMain(
                                 typeMap = mapOf(typeOf<ArticleType>() to ArticleTypeNavType),
                                 enterTransition = articleEnterTransition,
                                 exitTransition = articleExitTransition,
+                                popExitTransition = articleExitTransition,
                             ) { navEntry ->
                                 val article: Article = navEntry.toRoute()
                                 // 启用自适应导航时由 effect 转交详情栈，不创建会抢先消费一次性交接数据的临时页面。

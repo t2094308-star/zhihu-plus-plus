@@ -267,8 +267,8 @@ fun QuestionScreen(
         glassSettings ?: LiquidGlassSettings(),
     )
     // 从右往左滑进入搜索：用水平方向的 draggable，它自带方向锁、只在水平轴响应，
-    // 不会抢列表的垂直滚动；阈值取半屏宽避免误触喵。
-    val swipeToSearchThresholdPx = LocalWindowInfo.current.containerSize.width * 0.5f
+    // 不会抢列表的垂直滚动；阈值取屏幕的三分之一宽：半屏在手机上约 540 像素，容易滑不到而感觉"完全没反应"，三分之一既能防误触也够得着喵。
+    val swipeToSearchThresholdPx = LocalWindowInfo.current.containerSize.width / 3f
     var swipeToSearchDraggedLeft by remember { mutableFloatStateOf(0f) }
     val swipeToSearchState = rememberDraggableState { delta ->
         swipeToSearchDraggedLeft += delta
