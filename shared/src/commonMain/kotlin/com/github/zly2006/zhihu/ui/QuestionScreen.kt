@@ -27,6 +27,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +78,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,9 +93,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -137,7 +138,6 @@ import com.github.zly2006.zhihu.viewmodel.feed.QuestionFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.sharedArticleAnswerSwitchState
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** 右滑进搜索允许的倾角容错：水平线 ±30°喵。 */
@@ -266,38 +266,24 @@ fun QuestionScreen(
         RoundedCornerShape(0.dp),
         glassSettings ?: LiquidGlassSettings(),
     )
-    // 从右往左滑进入搜索：阈值取半屏宽，避免与列表滚动抢手势、也避免误触喵。
+    // 从右往左滑进入搜索：用水平方向的 draggable，它自带方向锁、只在水平轴响应，
+    // 不会抢列表的垂直滚动；阈值取半屏宽避免误触喵。
     val swipeToSearchThresholdPx = LocalWindowInfo.current.containerSize.width * 0.5f
-    // 手指很难画出标准水平线，所以这里只在 Initial pass 观察、不消费事件，
-    // 抬手指时再看总位移是否落在水平线 ±30° 的锥角内，避免"画不直就永远不触发"喵。
-    val swipeToSearchModifier = Modifier.pointerInput(Unit) {
-        awaitPointerEventScope {
-            var totalX = 0f
-            var totalY = 0f
-            var tracking = false
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                val change = event.changes.firstOrNull() ?: continue
-                if (change.pressed && !tracking) {
-                    tracking = true
-                    totalX = 0f
-                    totalY = 0f
-                }
-                if (tracking) {
-                    val delta = change.positionChange()
-                    totalX += delta.x
-                    totalY += delta.y
-                }
-                if (!change.pressed && tracking) {
-                    tracking = false
-                    val withinAngleTolerance = abs(totalY) <= abs(totalX) * SWIPE_TO_SEARCH_TAN_30_DEG
-                    if (withinAngleTolerance && totalX <= -swipeToSearchThresholdPx) {
-                        navigator.onNavigate(Search(query = ""))
-                    }
-                }
-            }
-        }
+    var swipeToSearchDraggedLeft by remember { mutableFloatStateOf(0f) }
+    val swipeToSearchState = rememberDraggableState { delta ->
+        swipeToSearchDraggedLeft += delta
     }
+    val swipeToSearchModifier = Modifier.draggable(
+        state = swipeToSearchState,
+        orientation = Orientation.Horizontal,
+        onDragStarted = { swipeToSearchDraggedLeft = 0f },
+        onDragStopped = {
+            if (swipeToSearchDraggedLeft <= -swipeToSearchThresholdPx) {
+                navigator.onNavigate(Search(query = ""))
+            }
+            swipeToSearchDraggedLeft = 0f
+        },
+    )
 
     Scaffold(
         modifier = Modifier.fillMaxSize().then(swipeToSearchModifier),

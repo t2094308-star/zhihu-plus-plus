@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +83,8 @@ import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.MarkdownTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun RenderImage(
@@ -264,7 +267,15 @@ fun RenderMarkdown(
     footer: (@Composable () -> Unit)? = null,
     useTiqianRenderer: Boolean = false,
 ) {
-    val document = remember(html) { htmlToMdAst(html) }
+    // 正文解析放到后台线程：大正文的 HTML 转 AST 是几百毫秒级的操作，
+    // 留在组合期会直接阻塞渲染线程，把转场动画整段"跳"过去喵。
+    // 首帧先用空文档占位（解析空串无成本），后台解析完成后再替换喵。
+    val placeholderDocument = remember { htmlToMdAst("") }
+    val document by produceState(initialValue = placeholderDocument, html) {
+        if (html.isNotEmpty()) {
+            value = withContext(Dispatchers.Default) { htmlToMdAst(html) }
+        }
+    }
     RenderMarkdownDocument(
         document = document,
         sourceMarkdown = null,
@@ -289,7 +300,13 @@ fun RenderMarkdownText(
     footer: (@Composable () -> Unit)? = null,
     useTiqianRenderer: Boolean = false,
 ) {
-    val document = remember(markdown) { markdownToMdAst(markdown) }
+    // 与 HTML 路径同理：解析放后台，避免把它排进渲染帧里喵。
+    val placeholderDocument = remember { markdownToMdAst("") }
+    val document by produceState(initialValue = placeholderDocument, markdown) {
+        if (markdown.isNotEmpty()) {
+            value = withContext(Dispatchers.Default) { markdownToMdAst(markdown) }
+        }
+    }
     RenderMarkdownDocument(
         document = document,
         sourceMarkdown = markdown,

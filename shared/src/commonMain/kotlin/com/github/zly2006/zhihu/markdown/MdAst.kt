@@ -59,13 +59,27 @@ import com.hrm.markdown.parser.ast.TableRow
 import com.hrm.markdown.parser.ast.Text
 import com.hrm.markdown.parser.ast.ThematicBreak
 import io.ktor.http.Url
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.fleeksoft.ksoup.nodes.Node as HtmlNode
 import com.hrm.markdown.parser.ast.Node as MarkdownNode
 
 private var parsingDocument: Document? = null
+
+// 解析过程依赖上面这个“当前正在解析的文档”全局引用，所以整段必须串行，
+// 否则并发解析会互相覆盖它、导致脚注错乱喵。锁的开销在后台线程上可忽略喵。
+private val parsingMutex = Mutex()
 private const val ZHIHU_EQUATION_URL_PREFIX = "https://www.zhihu.com/equation?tex="
 
 fun htmlToMdAst(
+    html: String,
+    noNativeBlock: Boolean = false,
+): Document = runBlocking {
+    parsingMutex.withLock { htmlToMdAstLocked(html, noNativeBlock) }
+}
+
+private fun htmlToMdAstLocked(
     html: String,
     noNativeBlock: Boolean = false,
 ): Document {
