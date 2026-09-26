@@ -53,6 +53,9 @@ ktlint {
         exclude("**/build/generated/ksp/**")
         exclude("**/ksp/**")
         exclude { it.file.absolutePath.contains("/build/generated/") }
+        // 内置第三方源码保持上游格式，不参与本项目的 ktlint 规则喵。
+        // 这里只匹配目录名而不带分隔符：Windows 上 absolutePath 用的是反斜杠，带 "/" 的匹配会失效喵。
+        exclude { it.file.absolutePath.contains("android-liquid-glass") }
     }
 }
 
@@ -62,6 +65,7 @@ tasks.withType<KtLintFormatTask>().configureEach {
     exclude("**/build/generated/ksp/**")
     exclude("**/ksp/**")
     exclude { it.file.absolutePath.contains("/build/generated/") }
+    exclude { it.file.absolutePath.contains("android-liquid-glass") }
 }
 
 tasks
@@ -124,6 +128,10 @@ kotlin {
     macosArm64()
 
     sourceSets {
+        // 内置的 Liquid Glass 底层特效库，保持上游目录结构以便对照升级喵。
+        commonMain {
+            kotlin.srcDir("../third_party/android-liquid-glass/src/commonMain/kotlin")
+        }
         commonMain.dependencies {
             api(project(":shared-local-db"))
             implementation(compose.runtime)
@@ -134,6 +142,8 @@ kotlin {
             implementation(compose.components.resources)
             implementation("io.coil-kt.coil3:coil-compose:3.5.0")
             implementation("io.coil-kt.coil3:coil-network-core:3.5.0")
+            // 内置的 Liquid Glass 库在 commonMain 里用 com.kyant.shapes 的连续曲率轮廓，所以依赖放在 commonMain喵。
+            implementation("io.github.kyant0:shapes:1.2.1")
             implementation("org.jetbrains.androidx.navigation:navigation-compose:2.9.2")
             implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
             implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
@@ -158,6 +168,9 @@ kotlin {
         }
         androidMain {
             kotlin.srcDir("src/tiqianMarkdownMain/kotlin")
+            kotlin.srcDir("../third_party/android-liquid-glass/src/androidMain/kotlin")
+            // 官方底栏组件源码；它使用独立发布的 com.kyant.shapes 连续曲率轮廓喵。
+            kotlin.srcDir("../third_party/android-liquid-glass/src/catalog")
             dependencies {
                 implementation("org.tiqian:markdown-compose:0.1.0-SNAPSHOT")
                 implementation("org.tiqian:math-font-stix:0.1.0-SNAPSHOT")
@@ -173,6 +186,8 @@ kotlin {
                 implementation("io.coil-kt.coil3:coil-network-ktor3-android:3.5.0")
                 implementation("io.ktor:ktor-client-android:3.5.0")
                 implementation("me.saket.telephoto:zoomable-image-coil3:0.19.0")
+                // 官方底栏的阻尼动画用 awaitFrame 逐帧推进喵。
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
                 implementation("org.jsoup:jsoup:1.22.2")
             }
         }

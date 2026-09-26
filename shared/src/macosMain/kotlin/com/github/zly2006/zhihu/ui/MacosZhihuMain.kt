@@ -17,14 +17,6 @@
 
 package com.github.zly2006.zhihu.ui
 
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,6 +55,13 @@ import com.github.zly2006.zhihu.platform.rememberExternalUrlOpener
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.theme.ThemeManager
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.DEFAULT_ARTICLE_OPEN_TRANSITION_ENABLED
+import com.github.zly2006.zhihu.ui.article.DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED
+import com.github.zly2006.zhihu.ui.article.articleOpenTransitionDurationMillis
+import com.github.zly2006.zhihu.ui.article.resolveArticleEnterTransition
+import com.github.zly2006.zhihu.ui.article.resolveArticleExitTransition
 import com.github.zly2006.zhihu.ui.subscreens.BOTTOM_BAR_ITEMS_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.BOTTOM_BAR_ITEM_ORDER_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.COLLECTION_DIRECT_BROWSE_PREFERENCE_KEY
@@ -97,6 +96,8 @@ fun MacosZhihuMain(windowChrome: MacosWindowChromeHost? = null) {
     val coroutineScope = rememberCoroutineScope()
     val openExternalUrl = rememberExternalUrlOpener()
     val userMessages = rememberUserMessageSink()
+    // 转场 lambda 每次导航都会执行，所以这里直接读设置即可，不需要额外的响应式状态喵。
+    val settings = rememberSettingsStore()
     val preferenceState = rememberMacosZhihuMainPreferenceState()
     var mainTabNavigationTarget by remember { mutableStateOf<TopLevelDestination?>(null) }
     var currentMainTabOpenFrom by remember { mutableStateOf<String?>(null) }
@@ -210,7 +211,8 @@ fun MacosZhihuMain(windowChrome: MacosWindowChromeHost? = null) {
             mainTabNavigationTarget = mainTabNavigationTarget,
             navigate = ::navigate,
             navigateContent = { destination, targetController -> navigate(destination, targetController) },
-            enableLandscapeListDetail = true,
+            // 关闭横屏列表-详情分栏：回答页改为落在主 NavHost，返回手势才能预览真实的上一页喵。
+            enableLandscapeListDetail = false,
             setCurrentMainTabOpenFrom = { currentMainTabOpenFrom = it },
             consumeMainTabNavigationTarget = { destination ->
                 if (mainTabNavigationTarget == destination) {
@@ -223,30 +225,23 @@ fun MacosZhihuMain(windowChrome: MacosWindowChromeHost? = null) {
             showHomeTopActions = windowChrome == null,
             onCurrentMainTabDestinationChange = { currentMainTabDestination = it },
             articleEnterTransition = {
-                when (sharedArticleAnswerSwitchState.answerTransitionDirection) {
-                    ArticleAnswerTransitionDirection.VERTICAL_NEXT ->
-                        slideInVertically(tween(300)) { it } + fadeIn(tween(300))
-                    ArticleAnswerTransitionDirection.VERTICAL_PREVIOUS ->
-                        slideInVertically(tween(300)) { -it } + fadeIn(tween(300))
-                    ArticleAnswerTransitionDirection.HORIZONTAL_NEXT ->
-                        slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
-                    ArticleAnswerTransitionDirection.HORIZONTAL_PREVIOUS ->
-                        slideInHorizontally(tween(300)) { -it } + fadeIn(tween(300))
-                    else -> slideInHorizontally(tween(300)) { it }
-                }
+                // 这个 lambda 每次导航都会执行，所以直接读设置即可，不需要额外的响应式状态喵。
+                resolveArticleEnterTransition(
+                    sharedArticleAnswerSwitchState.answerTransitionDirection,
+                    settings.getBoolean(
+                        ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY,
+                        DEFAULT_ARTICLE_OPEN_TRANSITION_ENABLED,
+                    ),
+                    articleOpenTransitionDurationMillis(
+                        settings.getFloat(
+                            ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY,
+                            DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED,
+                        ),
+                    ),
+                )
             },
             articleExitTransition = {
-                when (sharedArticleAnswerSwitchState.answerTransitionDirection) {
-                    ArticleAnswerTransitionDirection.VERTICAL_NEXT ->
-                        slideOutVertically(tween(300)) { -it } + fadeOut(tween(300))
-                    ArticleAnswerTransitionDirection.VERTICAL_PREVIOUS ->
-                        slideOutVertically(tween(300)) { it } + fadeOut(tween(300))
-                    ArticleAnswerTransitionDirection.HORIZONTAL_NEXT ->
-                        slideOutHorizontally(tween(300)) { -it } + fadeOut(tween(300))
-                    ArticleAnswerTransitionDirection.HORIZONTAL_PREVIOUS ->
-                        slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
-                    else -> ExitTransition.None
-                }
+                resolveArticleExitTransition(sharedArticleAnswerSwitchState.answerTransitionDirection)
             },
             articleContent = { article: Article, navEntry ->
                 val articleViewModel: ArticleViewModel = viewModel(navEntry) {

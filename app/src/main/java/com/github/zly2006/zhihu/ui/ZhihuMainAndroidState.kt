@@ -35,11 +35,13 @@ import com.github.zly2006.zhihu.ui.subscreens.BOTTOM_BAR_ITEMS_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.BOTTOM_BAR_ITEM_ORDER_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.COLLECTION_DIRECT_BROWSE_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.LANDSCAPE_LIST_DETAIL_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.subscreens.PREDICTIVE_BACK_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.START_DESTINATION_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.bottomBarItemOrderFromPreference
 import com.github.zly2006.zhihu.ui.subscreens.defaultBottomBarSelectionKeys
 import com.github.zly2006.zhihu.ui.subscreens.navDestinationFromName
 import com.github.zly2006.zhihu.ui.subscreens.normalizeBottomBarSelection
+import com.github.zly2006.zhihu.ui.subscreens.readLiquidGlassSettings
 import com.github.zly2006.zhihu.ui.subscreens.resolveValidStartDestinationKey
 
 /**
@@ -78,6 +80,8 @@ fun rememberAndroidZhihuMainPreferenceState(): ZhihuMainPreferenceState {
             autoHideBottomBar = settings.getBoolean("autoHideBottomBar", false),
             collectionDirectBrowseEnabled = settings.getBoolean(COLLECTION_DIRECT_BROWSE_PREFERENCE_KEY, false),
             landscapeListDetailEnabled = settings.getBoolean(LANDSCAPE_LIST_DETAIL_PREFERENCE_KEY, true),
+            predictiveBackEnabled = settings.getBoolean(PREDICTIVE_BACK_PREFERENCE_KEY, true),
+            glassBottomBar = readLiquidGlassSettings(settings),
             selectedBottomBarItemKeys = orderedSelectedKeys,
             startDestination = navDestinationFromName(
                 resolveValidStartDestinationKey(

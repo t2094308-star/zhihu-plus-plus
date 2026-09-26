@@ -145,7 +145,12 @@ import com.github.zly2006.zhihu.platform.platformName
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.reading.rememberReadingPlayerController
 import com.github.zly2006.zhihu.reading.saveReadingPlaybackSpeed
+import com.github.zly2006.zhihu.theme.LocalGlassBackdrop
+import com.github.zly2006.zhihu.theme.isLiquidGlassSupported
+import com.github.zly2006.zhihu.theme.rememberGlassBackdrop
 import com.github.zly2006.zhihu.ui.components.CompactReadingPlayerButton
+import com.github.zly2006.zhihu.ui.components.LiquidNavigationBar
+import com.github.zly2006.zhihu.ui.components.LiquidNavigationItem
 import com.github.zly2006.zhihu.ui.components.NoOpPagerNestedScrollConnection
 import com.github.zly2006.zhihu.ui.components.ReadingPlayerBar
 import com.github.zly2006.zhihu.ui.components.ReadingQueueSheet
@@ -420,9 +425,23 @@ fun ZhihuMain(
     var currentMainTabDestination by remember { mutableStateOf(startDestination) }
     val isAccountSurface = currentMainTabDestination == Account
 
+    // 预测性返回的进度只驱动视觉预览，提交返回仍然走原来的 popBackStack喵。
+    // 注册顺序即优先级：注册更晚的 handler 先收到事件，调整这里的相对位置会改变返回语义喵。
+
+    // 玻璃底栏只在平台支持且用户开启时组合；关闭时整条玻璃路径不参与，底栏保持原有 Material 样式喵。
+    val glassBottomBar = if (isLiquidGlassSupported) preferenceState.glassBottomBar else null
+    val glassBackdrop = if (glassBottomBar != null) rememberGlassBackdrop() else null
+    // 内容层负责录制给玻璃采样；底栏位于 NavHost 之外，所以不会把自己的绘制录进去造成递归采样喵。
+    val glassSource = glassBackdrop?.source ?: Modifier
+
+    // MainTabs 是 NavHost 的起始 route，所以这里条件成立时返回栈必然还有内容，
+    // 而 NavHost 内部的预测返回 handler 注册得更晚，实际会先消费事件喵。
     PlatformBackHandler(enabled = navEntry != null && !showMainNavigation && !showDetailPane) {
         navController.popBackStack()
     }
+    // 详情栏的返回预览由明细 NavHost 自己提供：navigation-compose 内置了 PredictiveBackHandler
+    // 与 ComposeNavigator.prepareForTransition，而它注册得比这里更晚、会先拿到返回事件。
+    // 所以这里保持普通返回处理即可——手写一套预览只会把 NavHost 的预览遮蔽掉、让它彻底失效喵。
     PlatformBackHandler(enabled = showDetailPane) {
         detailNavController.popBackStack()
     }
@@ -467,6 +486,9 @@ fun ZhihuMain(
         }
     }
 
+    // 这一处是"回到首页"而不是"返回上一页"，所以不参与预测性返回的进度预览喵：
+    // 预览相邻的前一页会与松手后跳回第 0 页的结果不一致，而 PagerState 也无法一步预览到任意页喵。
+    // 另外 currentPage 在预览滚动过程中会被改写，用它做 handler 的 enabled 条件会让手势中途被注销喵。
     PlatformBackHandler(
         showMainNavigation &&
             mainPagerState.currentPage != 0 &&
@@ -598,56 +620,89 @@ fun ZhihuMain(
                                 enter = slideInVertically(tween(200)) { it },
                                 exit = slideOutVertically(tween(200)) { it },
                             ) {
-                                NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    modifier = Modifier.height(
-                                        64.dp + bottomPadding,
-                                    ),
-                                ) {
-                                    @Composable
-                                    fun Item(
-                                        destination: TopLevelDestination,
-                                        label: String,
-                                        icon: ImageVector,
-                                    ) {
-                                        val tag = "nav_tab_${destination.name.lowercase()}"
-                                        NavigationBarItem(
-                                            currentBottomDestination?.let { it::class == destination::class } == true,
-                                            onClick = {
-                                                isReadingPlayerExpandedByUser = false
-                                                if (currentBottomDestination?.let { it::class == destination::class } != true) {
-                                                    navigateTopLevel(destination)
-                                                } else if (tapToScrollToTopEnabled) {
-                                                    scrollToTopTrigger++
-                                                }
-                                            },
-                                            label = { Text(label) },
-                                            alwaysShowLabel = true,
-                                            colors = if (!isDarkTheme) {
-                                                NavigationBarItemDefaults.colors().copy(
-                                                    selectedIndicatorColor =
-                                                        MaterialTheme.colorScheme.secondaryContainer
-                                                            .copy(alpha = 0.92f)
-                                                            .compositeOver(MaterialTheme.colorScheme.secondary),
+                                if (glassBottomBar != null && glassBackdrop != null) {
+                                    CompositionLocalProvider(LocalGlassBackdrop provides glassBackdrop) {
+                                        LiquidNavigationBar(
+                                            items = bottomBarItems.map { (destination, label, icon) ->
+                                                LiquidNavigationItem(
+                                                    label = label,
+                                                    icon = icon,
+                                                    selected = currentBottomDestination
+                                                        ?.let { it::class == destination::class } == true,
+                                                    tag = "nav_tab_${destination.name.lowercase()}",
+                                                    onClick = {
+                                                        isReadingPlayerExpandedByUser = false
+                                                        if (currentBottomDestination?.let { it::class == destination::class } != true) {
+                                                            navigateTopLevel(destination)
+                                                        } else if (tapToScrollToTopEnabled) {
+                                                            scrollToTopTrigger++
+                                                        }
+                                                    },
                                                 )
-                                            } else {
-                                                NavigationBarItemDefaults.colors()
                                             },
-                                            icon = {
-                                                Icon(icon, contentDescription = label)
-                                            },
-                                            modifier = Modifier.padding(top = 4.dp).testTag(tag),
+                                            settings = glassBottomBar,
                                         )
                                     }
+                                } else {
+                                    NavigationBar(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        modifier = Modifier.height(
+                                            64.dp + bottomPadding,
+                                        ),
+                                    ) {
+                                        @Composable
+                                        fun Item(
+                                            destination: TopLevelDestination,
+                                            label: String,
+                                            icon: ImageVector,
+                                        ) {
+                                            val tag = "nav_tab_${destination.name.lowercase()}"
+                                            NavigationBarItem(
+                                                currentBottomDestination?.let { it::class == destination::class } == true,
+                                                onClick = {
+                                                    isReadingPlayerExpandedByUser = false
+                                                    if (currentBottomDestination?.let { it::class == destination::class } != true) {
+                                                        navigateTopLevel(destination)
+                                                    } else if (tapToScrollToTopEnabled) {
+                                                        scrollToTopTrigger++
+                                                    }
+                                                },
+                                                label = { Text(label) },
+                                                alwaysShowLabel = true,
+                                                colors = if (!isDarkTheme) {
+                                                    NavigationBarItemDefaults.colors().copy(
+                                                        selectedIndicatorColor =
+                                                            MaterialTheme.colorScheme.secondaryContainer
+                                                                .copy(alpha = 0.92f)
+                                                                .compositeOver(MaterialTheme.colorScheme.secondary),
+                                                    )
+                                                } else {
+                                                    NavigationBarItemDefaults.colors()
+                                                },
+                                                icon = {
+                                                    Icon(icon, contentDescription = label)
+                                                },
+                                                modifier = Modifier.padding(top = 4.dp).testTag(tag),
+                                            )
+                                        }
 
-                                    bottomBarItems.forEach { item ->
-                                        Item(item.first, item.second, item.third)
+                                        bottomBarItems.forEach { item ->
+                                            Item(item.first, item.second, item.third)
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                ) { innerPadding ->
+                ) { scaffoldPadding ->
+                    // 玻璃底栏浮在内容之上，主 tab 页面不能再按底栏高度内缩，
+                    // 否则内容不会画到底栏下方，玻璃就采样不到真实内容了喵。
+                    // 代价是列表最后一项可能被半透明底栏压住，与官方组件的取舍一致喵。
+                    val innerPadding = if (glassBottomBar != null) {
+                        PaddingValues(top = scaffoldPadding.calculateTopPadding())
+                    } else {
+                        scaffoldPadding
+                    }
                     CompositionLocalProvider(
                         LocalLifecycleOwner provides listLifecycleOwner,
                         LocalArticleNavController provides navController,
@@ -674,7 +729,8 @@ fun ZhihuMain(
                     ) {
                         NavHost(
                             navController,
-                            modifier = Modifier.pointerInput(Unit) {
+                            // 玻璃底栏从这个节点录制的内容层采样；未启用时 glassSource 就是 Modifier，行为不变喵。
+                            modifier = glassSource.pointerInput(Unit) {
                                 while (true) {
                                     awaitPointerEventScope {
                                         awaitFirstDown(
@@ -874,7 +930,11 @@ fun ZhihuMain(
                             },
                         )
                     }
-                    DetailPane(Modifier.weight(1f).fillMaxSize())
+                    DetailPane(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxSize(),
+                    )
                 }
             }
         }

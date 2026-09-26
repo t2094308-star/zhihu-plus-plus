@@ -87,6 +87,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -135,6 +136,9 @@ import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.platform.rememberWebViewUrlOpener
 import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
+import com.github.zly2006.zhihu.theme.LiquidGlassSettings
+import com.github.zly2006.zhihu.theme.rememberGlassBackdrop
+import com.github.zly2006.zhihu.theme.rememberGlassSurface
 import com.github.zly2006.zhihu.ui.components.AnnouncementCard
 import com.github.zly2006.zhihu.ui.components.AnnouncementCardDefaults
 import com.github.zly2006.zhihu.ui.components.BlockByKeywordsDialog
@@ -153,6 +157,7 @@ import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.subscreens.DEFAULT_FAB_OPACITY
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FAB_OPACITY
 import com.github.zly2006.zhihu.ui.subscreens.SystemUpdateState
+import com.github.zly2006.zhihu.ui.subscreens.rememberLiquidGlassSettings
 import com.github.zly2006.zhihu.ui.subscreens.rememberSystemUpdateState
 import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.util.json
@@ -241,6 +246,18 @@ fun HomeScreen(
     val navigator = LocalNavigator.current
     val baseEnvironment = rememberPaginationEnvironment(allowGuestAccess = true)
     val settings = rememberSettingsStore()
+
+    // 首页搜索胶囊的玻璃：录制挂在信息流列表上、玻璃面挂在搜索框上，避免自采样喵。
+    val glassSettings = rememberLiquidGlassSettings(settings)
+    val resolvedGlassSettings = glassSettings ?: LiquidGlassSettings()
+    val pageGlassBackdrop = if (glassSettings != null) rememberGlassBackdrop() else null
+    val pageGlassSource = pageGlassBackdrop?.source ?: Modifier
+    // 顶栏背景层是矩形（状态栏那一段），单独用直角玻璃喵。
+    // 顶栏整条保持透明，玻璃只做在搜索胶囊上喵。
+    val duo3SearchGlassPanel =
+        rememberGlassSurface(pageGlassBackdrop, RoundedCornerShape(32.dp), resolvedGlassSettings)
+    val plainSearchGlassPanel =
+        rememberGlassSurface(pageGlassBackdrop, RoundedCornerShape(24.dp), resolvedGlassSettings)
     val homeState: HomeScreenState = viewModel { HomeScreenState(settings) }
     val remoteHistory = homeState.remoteHistory
     val paginationEnvironment = remember(baseEnvironment, remoteHistory) { remoteHistory.feedEnvironment(baseEnvironment) }
@@ -521,6 +538,7 @@ fun HomeScreen(
                                 .height(
                                     WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp + 32.dp,
                                 ).fillMaxWidth(),
+                            color = Color.Transparent,
                         ) { }
                         Row(
                             modifier = Modifier
@@ -534,9 +552,14 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(64.dp)
+                                    .then(duo3SearchGlassPanel)
                                     .testTag(HOME_SEARCH_BUTTON_TAG),
                                 shape = RoundedCornerShape(32.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                color = if (glassSettings != null) {
+                                    Color.Transparent
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                },
                                 onClick = {
                                     navigator.onNavigate(
                                         Search(query = ""),
@@ -606,7 +629,10 @@ fun HomeScreen(
                         }
                     }
                 } else {
-                    Surface(shadowElevation = 4.dp) {
+                    Surface(
+                        shadowElevation = 0.dp,
+                        color = Color.Transparent,
+                    ) {
                         Row(
                             modifier = Modifier
                                 .testTag(HOME_TOP_ACTIONS_TAG)
@@ -618,9 +644,15 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(36.dp)
+                                    .then(plainSearchGlassPanel)
+                                    .then(duo3SearchGlassPanel)
                                     .testTag(HOME_SEARCH_BUTTON_TAG),
                                 shape = RoundedCornerShape(24.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                color = if (glassSettings != null) {
+                                    Color.Transparent
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
                                 onClick = {
                                     navigator.onNavigate(
                                         Search(query = ""),
@@ -704,6 +736,7 @@ fun HomeScreen(
                     items = viewModel.displayItems,
                     listState = listState,
                     modifier = Modifier
+                        .then(pageGlassSource)
                         .pageTurnViewportWithGuide(pageTurnTarget)
                         .testTag(HOME_FEED_LIST_TAG),
                     contentPadding = PaddingValues(

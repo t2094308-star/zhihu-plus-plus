@@ -97,7 +97,11 @@ URL 解析集中在 `resolveContent()`。支持知乎问题、回答、文章、
 | `showSearchHotSearch` | 搜索界面显示热搜 | 空搜索页内容 | 搜索页空查询状态读取 |
 | `showSearchHistory` | 搜索历史 | 是否记录和展示新搜索 | 关闭后不再记录新的搜索 |
 | `use_custom_nav_host` | 自定义导航 | 持久化的技术性导航开关 | 当前主要在设置页读写；实现效果前先 `rg` 运行时读取点 |
-| `enable_predictive_back` | 预测性返回 | 持久化的 Android 14+ 返回动画开关 | 当前主要在设置页读写；实现效果前先 `rg` 运行时读取点 |
+| `enable_predictive_back` | 预测性返回 | 应用自管的返回动作是否在拖动时预览（详情栏位移、评论弹层缩放） | 仅 Android 13+ 显示；页面之间的转场预览由导航组件自身提供，不受此开关控制；关掉后详情栏与弹层走普通 `PlatformBackHandler` 即时提交 |
+| `displayFrameRateMode` | 显示刷新率 | 把窗口锁定到 60 / 90 / 120 Hz 或跟随系统 | 仅 Android 11+ 显示；系统省电模式和厂商的智能刷新率策略可能覆盖；只作用于主 Activity，不含视频、WebView 等独立 Activity |
+| `glassBottomBar` | 液态玻璃 | 底部导航栏、回答页顶底栏、问题页顶栏、评论输入栏改用液态玻璃材质 | 仅 Android 13+ 显示；这四处共用同一组绘制参数（`glassBottomBarHighlight` / `BlurDp` / `CornerDp` / `RefractionDp` / `SurfaceAlpha`）；评论输入栏只在文章路径生效，Pin / 问题页的评论弹层走独立平台窗口、跨窗口采样不成立 |
+| `articleOpenTransition` | 打开回答的上浮转场 | 从列表打开回答时页面微微上浮并扩散到全屏 | 默认开启；关闭时逐字回到原来的横向滑入；回答之间的切换转场不受它影响 |
+| `articleOpenTransitionSpeed` | 转场速度 | 上浮扩散动画的快慢（0.5x–2.0x） | 1.0x 对应 340ms；只在开关开启时显示 |
 
 ### 推荐系统与内容过滤
 

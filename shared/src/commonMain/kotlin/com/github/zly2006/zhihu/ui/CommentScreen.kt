@@ -109,6 +109,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -448,6 +449,10 @@ fun CommentScreen(
     onInitialChildCommentResolved: (CommentModel, DataHolder.Comment) -> Unit = { _, _ -> },
     pageTurnEnabled: Boolean = false,
     showPageTurnFab: Boolean = false,
+    /** 挂到评论列表上的录制 modifier；空表示这一层不启用玻璃喵。 */
+    glassSource: Modifier = Modifier,
+    /** 输入栏的玻璃面；null 表示沿用原有 Material 底色喵。 */
+    glassPanel: Modifier? = null,
 ) {
     val paginationEnvironment = rememberPaginationEnvironment(allowGuestAccess = false)
     val readingSettings = rememberSettingsStore()
@@ -458,6 +463,9 @@ fun CommentScreen(
     var isSending by remember { mutableStateOf(false) }
     var replyToComment by remember { mutableStateOf<CommentModel?>(null) }
     var showEmojiPicker by remember { mutableStateOf(false) }
+    // 输入栏实测高度；玻璃模式下列表要按它加底部留白，避免最后一条被压住喵。
+    var commentInputBarHeightPx by remember { mutableIntStateOf(0) }
+    val commentInputBarHeightDp = with(LocalDensity.current) { commentInputBarHeightPx.toDp() }
     var commentPendingDeletion by remember { mutableStateOf<CommentModel?>(null) }
     var isDeletingComment by remember { mutableStateOf(false) }
     var deleteCommentError by remember { mutableStateOf<String?>(null) }
@@ -686,12 +694,17 @@ fun CommentScreen(
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
             color = commentBackgroundColor,
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .navigationBarsPadding(),
             ) {
-                Box(modifier = Modifier.weight(1f)) {
+                // 玻璃输入栏浮在列表之上，列表占满整屏才能让内容滚到输入栏下方被玻璃采样到喵。
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(glassSource),
+                ) {
                     when {
                         viewModel.isLoading && viewModel.allData.isEmpty() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -831,7 +844,13 @@ fun CommentScreen(
                                     .fillMaxSize()
                                     .pageTurnViewportWithGuide(pageTurnTarget)
                                     .testTag(COMMENT_SCREEN_LIST_TAG),
-                                contentPadding = PaddingValues(bottom = 16.dp, start = 16.dp, end = 16.dp, top = 8.dp),
+                                // 玻璃输入栏浮在列表之上，底部留出它的实测高度，最后一条才不会被压住喵。
+                                contentPadding = PaddingValues(
+                                    top = 8.dp,
+                                    bottom = 16.dp + if (glassPanel != null) commentInputBarHeightDp else 0.dp,
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                ),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
                                 if (activeCommentItem != null) {
@@ -1003,9 +1022,13 @@ fun CommentScreen(
 
                 // 评论输入框
                 Surface(
-                    tonalElevation = 2.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                    color = commentInputBarColor,
+                    tonalElevation = if (glassPanel != null) 0.dp else 2.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .onSizeChanged { commentInputBarHeightPx = it.height }
+                        .then(glassPanel ?: Modifier),
+                    color = if (glassPanel != null) Color.Transparent else commentInputBarColor,
                 ) {
                     Column {
                         // 回复目标提示栏。

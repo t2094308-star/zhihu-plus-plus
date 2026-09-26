@@ -23,6 +23,12 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.github.zly2006.zhihu.platform.DisplayFrameRateMode
+import com.github.zly2006.zhihu.platform.PlatformDisplayFrameRateEffect
+import com.github.zly2006.zhihu.platform.isDisplayFrameRateControlSupported
+import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.ui.rememberObservedSetting
+import com.github.zly2006.zhihu.ui.subscreens.DISPLAY_FRAME_RATE_PREFERENCE_KEY
 import com.materialkolor.dynamicColorScheme
 
 private val DarkColorScheme = darkColorScheme(
@@ -72,6 +78,16 @@ fun ZhihuTheme(
     )
 
     PlatformSystemBarEffect(darkTheme)
+
+    if (isDisplayFrameRateControlSupported) {
+        val settings = rememberSettingsStore()
+        val displayFrameRateMode = rememberObservedSetting(settings, DISPLAY_FRAME_RATE_PREFERENCE_KEY) {
+            DisplayFrameRateMode.fromPreference(
+                getString(DISPLAY_FRAME_RATE_PREFERENCE_KEY, DisplayFrameRateMode.System.preferenceValue),
+            )
+        }
+        PlatformDisplayFrameRateEffect(displayFrameRateMode.value)
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -50,10 +51,14 @@ import com.github.zly2006.zhihu.navigation.CommentHolder
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Pin
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.theme.LiquidGlassSettings
 import com.github.zly2006.zhihu.theme.Typography
+import com.github.zly2006.zhihu.theme.rememberGlassBackdrop
+import com.github.zly2006.zhihu.theme.rememberGlassSurface
 import com.github.zly2006.zhihu.ui.CommentScreen
 import com.github.zly2006.zhihu.ui.commentThreadKey
 import com.github.zly2006.zhihu.ui.consumePendingCommentId
+import com.github.zly2006.zhihu.ui.subscreens.rememberLiquidGlassSettings
 import com.github.zly2006.zhihu.viewmodel.CommentItem
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -70,6 +75,22 @@ fun CommentScreenComponent(
     isZhPlusAuthorContent: Boolean = false,
 ) {
     val settings = rememberSettingsStore()
+    // 评论输入栏的玻璃只在同一组合内成立：Pin / 问题页的弹层走独立平台窗口，跨窗口采样做不到，
+    // 那些路径继续用原有 Material 底色喵。
+    val commentGlassSettings = rememberLiquidGlassSettings(settings)
+    val resolvedCommentGlass = commentGlassSettings ?: LiquidGlassSettings()
+    val rootSheetUsesPlatformWindow = content !is Article
+    val rootCommentGlassBackdrop = if (commentGlassSettings != null && !rootSheetUsesPlatformWindow) {
+        rememberGlassBackdrop()
+    } else {
+        null
+    }
+    val rootGlassSource = rootCommentGlassBackdrop?.source ?: Modifier
+    val rootGlassPanel = if (rootCommentGlassBackdrop != null) {
+        rememberGlassSurface(rootCommentGlassBackdrop, RoundedCornerShape(0.dp), resolvedCommentGlass)
+    } else {
+        null
+    }
     val initialPendingCommentId = consumePendingCommentId(content)
     var pendingCommentId by remember(content) {
         mutableStateOf(initialPendingCommentId)
@@ -154,7 +175,7 @@ fun CommentScreenComponent(
                 shouldDismissOnClickOutside = true,
             ),
             dragHandle = { DragHandleTitle("评论") },
-            usePlatformWindow = content !is Article,
+            usePlatformWindow = rootSheetUsesPlatformWindow,
         ) {
             CommentScreen(
                 content = { content },
@@ -177,8 +198,23 @@ fun CommentScreenComponent(
                     pendingChildComment = childComment
                     activeChildComment = rootComment
                 },
+                glassSource = rootGlassSource,
+                glassPanel = rootGlassPanel,
             )
         }
+    }
+
+    val childSheetUsesPlatformWindow = childTarget != null && childTarget.article !is Article
+    val childCommentGlassBackdrop = if (commentGlassSettings != null && !childSheetUsesPlatformWindow) {
+        rememberGlassBackdrop()
+    } else {
+        null
+    }
+    val childGlassSource = childCommentGlassBackdrop?.source ?: Modifier
+    val childGlassPanel = if (childCommentGlassBackdrop != null) {
+        rememberGlassSurface(childCommentGlassBackdrop, RoundedCornerShape(0.dp), resolvedCommentGlass)
+    } else {
+        null
     }
 
     if (commentsVisible && activeChildComment != null && childTarget != null && childDraftKey != null) {
@@ -195,7 +231,7 @@ fun CommentScreenComponent(
                 shouldDismissOnClickOutside = true,
             ),
             dragHandle = { DragHandleTitle("回复") },
-            usePlatformWindow = childTarget.article !is Article,
+            usePlatformWindow = childSheetUsesPlatformWindow,
         ) {
             CommentScreen(
                 content = { childTarget },
@@ -207,6 +243,8 @@ fun CommentScreenComponent(
                 initialComment = pendingChildComment,
                 pageTurnEnabled = childTarget.article is Article || childTarget.article is Pin,
                 showPageTurnFab = childTarget.article is Pin,
+                glassSource = childGlassSource,
+                glassPanel = childGlassPanel,
             )
         }
     }

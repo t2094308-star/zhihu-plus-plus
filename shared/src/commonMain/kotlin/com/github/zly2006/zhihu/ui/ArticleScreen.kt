@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,9 +67,11 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -79,6 +82,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -91,7 +95,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -101,6 +104,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.navigation.compose.currentBackStackEntryAsState
 import coil3.compose.AsyncImage
 import com.github.zly2006.zhihu.data.DataHolder
@@ -117,7 +121,12 @@ import com.github.zly2006.zhihu.platform.isArticleHtmlExportSupported
 import com.github.zly2006.zhihu.platform.isArticleImageExportSupported
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
+import com.github.zly2006.zhihu.theme.LiquidGlassSettings
+import com.github.zly2006.zhihu.theme.LocalGlassBackdrop
+import com.github.zly2006.zhihu.theme.rememberGlassBackdrop
+import com.github.zly2006.zhihu.theme.rememberGlassSurface
 import com.github.zly2006.zhihu.ui.AnswerDoubleTapAction
+import com.github.zly2006.zhihu.ui.ArticleAnswerTransitionDirection
 import com.github.zly2006.zhihu.ui.article.AigcFlagSheet
 import com.github.zly2006.zhihu.ui.article.ArticleActionsMenu
 import com.github.zly2006.zhihu.ui.article.ArticleSummarySheet
@@ -134,7 +143,6 @@ import com.github.zly2006.zhihu.ui.article.voteUpNeutralContentDuo3
 import com.github.zly2006.zhihu.ui.components.ANSWER_SWITCH_SENSITIVITY_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.components.AnswerHorizontalOverscroll
 import com.github.zly2006.zhihu.ui.components.AnswerVerticalOverscroll
-import com.github.zly2006.zhihu.ui.components.AuthorBadge
 import com.github.zly2006.zhihu.ui.components.CollectionDialogComponent
 import com.github.zly2006.zhihu.ui.components.CommentScreenComponent
 import com.github.zly2006.zhihu.ui.components.ContentEndMarker
@@ -144,14 +152,14 @@ import com.github.zly2006.zhihu.ui.components.ExportDialogComponent
 import com.github.zly2006.zhihu.ui.components.MyModalBottomSheet
 import com.github.zly2006.zhihu.ui.components.VerticalReadingProgressBar
 import com.github.zly2006.zhihu.ui.components.VotersSheet
-import com.github.zly2006.zhihu.ui.components.ZhihuTwoRowsTopAppBar
 import com.github.zly2006.zhihu.ui.components.normalizedAnswerSwitchSensitivity
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
+import com.github.zly2006.zhihu.ui.components.pressLift
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
-import com.github.zly2006.zhihu.ui.components.rememberPreferCollapsedExitUntilCollapsedScrollBehavior
 import com.github.zly2006.zhihu.ui.subscreens.DEFAULT_PAGE_TURN_SWITCH_ANSWER
 import com.github.zly2006.zhihu.ui.subscreens.DUO3_TIQIAN_MARKDOWN_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.PREF_PAGE_TURN_SWITCH_ANSWER
+import com.github.zly2006.zhihu.ui.subscreens.rememberLiquidGlassSettings
 import com.github.zly2006.zhihu.util.formatCompactCount
 import com.github.zly2006.zhihu.util.smoothGradient
 import com.github.zly2006.zhihu.viewmodel.ArticleViewModel
@@ -162,6 +170,7 @@ import com.github.zly2006.zhihu.viewmodel.sharedArticleAnswerSwitchState
 import com.materialkolor.ktx.harmonize
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import zhihu.shared.generated.resources.Res
 import zhihu.shared.generated.resources.ic_vote_down_24dp
@@ -212,6 +221,29 @@ fun ArticleScreen(
         normalizedAnswerSwitchSensitivity(getFloat(ANSWER_SWITCH_SENSITIVITY_PREFERENCE_KEY, DEFAULT_ANSWER_SWITCH_SENSITIVITY))
     }
     val pinAnswerDate by rememberObservedSetting(settings, "pinAnswerDate") { getBoolean("pinAnswerDate", false) }
+
+    // 玻璃面用页面自己的录制：内容录进 backdrop，顶栏与底栏挂在它的兄弟位置，
+    // 这样玻璃面不会把自己也录进去、再采样自己喵。
+    val glassSettings = rememberLiquidGlassSettings(settings)
+    val pageGlassBackdrop = if (glassSettings != null) rememberGlassBackdrop() else null
+    val pageGlassSource = pageGlassBackdrop?.source ?: Modifier
+    // 顶栏是全宽折叠栏、用直角；底部的操作按钮各自是胶囊，用胶囊形状喵。
+    val resolvedGlassSettings = glassSettings ?: LiquidGlassSettings()
+    val topGlassPanel = rememberGlassSurface(
+        pageGlassBackdrop,
+        RoundedCornerShape(
+            bottomStart = resolvedGlassSettings.cornerDp.dp,
+            bottomEnd = resolvedGlassSettings.cornerDp.dp,
+        ),
+        resolvedGlassSettings,
+    )
+    // 玻璃只覆盖按钮形状本身（胶囊），不做成整条底栏面板喵。
+    val pillGlassPanel = rememberGlassSurface(
+        pageGlassBackdrop,
+        RoundedCornerShape(50),
+        resolvedGlassSettings,
+    )
+
     val useDuo3ArticleActions by rememberObservedSetting(settings, "duo3_article_actions") {
         getBoolean("duo3_article_actions", false)
     }
@@ -301,7 +333,7 @@ fun ArticleScreen(
     val pageTurnTarget = rememberPageTurnTarget(
         scrollState = scrollState,
         enabled = pageTurnActive,
-        maxScrollValue = effectiveScrollMaxValue,
+        maxScrollValue = { effectiveScrollMaxValue },
         onPageUpAtStart = (answerNavigationState::navigateToPrevious)
             .takeIf { article.type == ArticleType.Answer && pageTurnSwitchAnswer },
         onPageDownAtEnd = (answerNavigationState::navigateToNext)
@@ -423,7 +455,6 @@ fun ArticleScreen(
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainContent() {
-        val scrollBehavior = rememberPreferCollapsedExitUntilCollapsedScrollBehavior()
         // 记录历史最大滚动范围，避免顶栏展开/收起时 maxValue 短暂变化导致 scrollBehavior 抖动。
         var scrollStateMaxValue by remember { mutableIntStateOf(0) }
         LaunchedEffect(scrollState) {
@@ -436,7 +467,7 @@ fun ArticleScreen(
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (!isImmersiveMode) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier),
+                .then(if (!isImmersiveMode) Modifier else Modifier),
             topBar = if (isImmersiveMode) {
                 {}
             } else {
@@ -448,9 +479,10 @@ fun ArticleScreen(
                             }.graphicsLayer {
                                 translationY = topBarState.offset.value
                                 alpha = if (topBarState.heightPx > 0f) 1f + (topBarState.offset.value / topBarState.heightPx) else 1f
-                            },
+                            }.then(topGlassPanel),
                     ) {
-                        ZhihuTwoRowsTopAppBar(
+                        // 单行顶栏：标题与返回键、更多按钮同处一行，顶部整体高度收成一行喵。
+                        TopAppBar(
                             navigationIcon = {
                                 IconButton(
                                     onClick = {
@@ -460,18 +492,37 @@ fun ArticleScreen(
                                             navigator.onNavigateBack()
                                         }
                                     },
+                                    modifier = Modifier.pressLift().then(pillGlassPanel),
                                     colors = IconButtonDefaults.iconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        // 玻璃模式下按钮底色交给玻璃面，避免不透明色块盖住它喵。
+                                        containerColor = if (glassSettings != null) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant,
                                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     ),
                                 ) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                                 }
                             },
+                            title = {
+                                Text(
+                                    text = viewModel.title,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.let {
+                                        if (article.type == ArticleType.Answer) {
+                                            it.clickable {
+                                                navigator.onNavigate(Question(viewModel.questionId, viewModel.title))
+                                            }
+                                        } else {
+                                            it
+                                        }
+                                    },
+                                )
+                            },
                             actions = {
                                 if (useDuo3ArticleActions) {
                                     IconButton(
                                         onClick = { showActionsMenu = true },
+                                        modifier = Modifier.pressLift().then(pillGlassPanel),
                                     ) {
                                         Icon(
                                             Icons.Filled.MoreVert,
@@ -480,98 +531,14 @@ fun ArticleScreen(
                                     }
                                 }
                             },
-                            title = { expanded ->
-                                Text(
-                                    text = viewModel.title,
-                                    modifier = Modifier
-                                        .padding(if (expanded) PaddingValues(end = 16.dp) else PaddingValues())
-                                        .let {
-                                            if (article.type == ArticleType.Answer) {
-                                                it.clickable {
-                                                    navigator.onNavigate(Question(viewModel.questionId, viewModel.title))
-                                                }
-                                            } else {
-                                                it
-                                            }
-                                        },
-                                    maxLines = if (expanded) Int.MAX_VALUE else 1,
-                                    overflow = TextOverflow.Ellipsis,
+                            colors = if (glassSettings != null) {
+                                TopAppBarDefaults.topAppBarColors(
+                                    containerColor = Color.Transparent,
+                                    scrolledContainerColor = Color.Transparent,
                                 )
+                            } else {
+                                TopAppBarDefaults.topAppBarColors()
                             },
-                            subtitle = { expanded ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .padding(if (expanded) PaddingValues(vertical = 16.dp) else PaddingValues(top = 2.dp, bottom = 8.dp))
-                                        .padding(end = 16.dp)
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            navigator.onNavigate(
-                                                com.github.zly2006.zhihu.navigation.Person(
-                                                    id = viewModel.authorId,
-                                                    urlToken = viewModel.authorUrlToken,
-                                                    name = viewModel.authorName,
-                                                ),
-                                            )
-                                        },
-                                ) {
-                                    if (viewModel.authorAvatarSrc.isNotEmpty()) {
-                                        AsyncImage(
-                                            model = viewModel.authorAvatarSrc,
-                                            contentDescription = "作者头像",
-                                            modifier = Modifier
-                                                .size(if (expanded) 40.dp else 20.dp)
-                                                .clip(CircleShape),
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(if (expanded) 40.dp else 20.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(if (expanded) 8.dp else 4.dp))
-
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = viewModel.authorName,
-                                                style = if (expanded) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelMedium,
-                                                color = if (expanded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f, fill = false),
-                                            )
-                                            if (viewModel.authorBadge != null) {
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                AuthorBadge(
-                                                    badge = viewModel.authorBadge,
-                                                    compact = !expanded,
-                                                )
-                                            }
-                                        }
-                                        if (viewModel.authorBio.isNotEmpty() && expanded) {
-                                            Text(
-                                                text = viewModel.authorBio,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
-                            },
-                            scrollBehavior = if (scrollStateMaxValue > 0) scrollBehavior else null,
-                            colors = TopAppBarDefaults.topAppBarColors().copy(
-                                scrolledContainerColor = if (MaterialTheme.colorScheme.surfaceContainer != MaterialTheme.colorScheme.background) {
-                                    MaterialTheme.colorScheme.surfaceContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                            ),
                         )
                     }
                 }
@@ -597,8 +564,12 @@ fun ArticleScreen(
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
+                                        // 玻璃模式下容器不铺不透明底色，改用胶囊玻璃；投票状态由内部按钮颜色表达喵。
+                                        .then(if (glassSettings != null) pillGlassPanel else Modifier)
                                         .background(
-                                            color = if (viewModel.voteUpState == VoteUpState.Neutral) {
+                                            color = if (glassSettings != null) {
+                                                Color.Transparent
+                                            } else if (viewModel.voteUpState == VoteUpState.Neutral) {
                                                 voteUpNeutralContent().copy(alpha = 0.1f)
                                             } else {
                                                 voteUpNeutralContent()
@@ -664,6 +635,11 @@ fun ArticleScreen(
                                 Row(horizontalArrangement = Arrangement.End) {
                                     IconButton(
                                         onClick = { showCollectionDialog = true },
+                                        modifier = Modifier.pressLift(
+                                            pressedScale = 1.3f,
+                                            pressedColor = MaterialTheme.colorScheme.primary,
+                                            pressedGlow = MaterialTheme.colorScheme.primary,
+                                        ),
                                         colors = IconButtonDefaults.iconButtonColors(
                                             containerColor = if (viewModel.isFavorited) Color(0xFFF57C00) else MaterialTheme.colorScheme.secondaryContainer,
                                             contentColor = if (viewModel.isFavorited) Color.White else MaterialTheme.colorScheme.onSecondaryContainer,
@@ -673,6 +649,11 @@ fun ArticleScreen(
                                     }
                                     Button(
                                         onClick = { showComments = true },
+                                        modifier = Modifier.pressLift(
+                                            pressedScale = 1.3f,
+                                            pressedColor = MaterialTheme.colorScheme.primary,
+                                            pressedGlow = MaterialTheme.colorScheme.primary,
+                                        ),
                                         contentPadding = PaddingValues(start = 8.dp, end = 12.dp),
                                         colors = voteUpNeutralButtonColors(),
                                     ) {
@@ -683,6 +664,11 @@ fun ArticleScreen(
 
                                     IconButton(
                                         onClick = { showActionsMenu = true },
+                                        modifier = Modifier.pressLift(
+                                            pressedScale = 1.3f,
+                                            pressedColor = MaterialTheme.colorScheme.primary,
+                                            pressedGlow = MaterialTheme.colorScheme.primary,
+                                        ),
                                         colors = IconButtonDefaults.iconButtonColors(
                                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -706,8 +692,8 @@ fun ArticleScreen(
                             ) {
                                 Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                        // 玻璃模式下容器不铺不透明底色，改用胶囊玻璃；投票状态由内部按钮颜色表达喵。
+                                        .then(if (glassSettings != null) pillGlassPanel else Modifier)
                                         .padding(4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -715,7 +701,14 @@ fun ArticleScreen(
                                         visible = viewModel.voteUpState == VoteUpState.Neutral || viewModel.voteUpState == VoteUpState.Up,
                                     ) {
                                         val upBgColor by animateColorAsState(
-                                            targetValue = if (viewModel.voteUpState == VoteUpState.Up) voteUpNeutralContentDuo3() else MaterialTheme.colorScheme.surfaceContainer,
+                                            targetValue = if (viewModel.voteUpState == VoteUpState.Up) {
+                                                voteUpNeutralContentDuo3()
+                                            } else if (glassSettings != null) {
+                                                // 未选中且启用玻璃时不铺底色，让玻璃透出来喵。
+                                                Color.Transparent
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainer
+                                            },
                                         )
                                         val upContentColor by animateColorAsState(
                                             targetValue = if (viewModel.voteUpState == VoteUpState.Up) Color.White else MaterialTheme.colorScheme.onSurface,
@@ -755,7 +748,14 @@ fun ArticleScreen(
                                         visible = viewModel.voteUpState == VoteUpState.Neutral || viewModel.voteUpState == VoteUpState.Down,
                                     ) {
                                         val downBgColor by animateColorAsState(
-                                            targetValue = if (viewModel.voteUpState == VoteUpState.Down) voteUpNeutralContentDuo3() else MaterialTheme.colorScheme.surfaceContainer,
+                                            targetValue = if (viewModel.voteUpState == VoteUpState.Down) {
+                                                voteUpNeutralContentDuo3()
+                                            } else if (glassSettings != null) {
+                                                // 未选中且启用玻璃时不铺底色，让玻璃透出来喵。
+                                                Color.Transparent
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainer
+                                            },
                                         )
                                         val downContentColor by animateColorAsState(
                                             targetValue = if (viewModel.voteUpState == VoteUpState.Down) Color.White else MaterialTheme.colorScheme.onSurface,
@@ -797,18 +797,23 @@ fun ArticleScreen(
 
                                 Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                        // 容器不再裁剪：按压缩放会让子项短暂超出边界，裁掉就会看到被切平的边缘喵。
+                                        .then(if (glassSettings != null) pillGlassPanel else Modifier)
                                         .padding(end = 4.dp),
                                     horizontalArrangement = Arrangement.End,
                                 ) {
                                     IconButton(
                                         onClick = { showCollectionDialog = true },
+                                        modifier = Modifier.pressLift(
+                                            pressedScale = 1.3f,
+                                            pressedColor = MaterialTheme.colorScheme.primary,
+                                            pressedGlow = MaterialTheme.colorScheme.primary,
+                                        ),
                                         colors = IconButtonDefaults.iconButtonColors(
                                             containerColor = if (viewModel.isFavorited) {
                                                 Color(0xFFF57C00).harmonize(MaterialTheme.colorScheme.primary)
                                             } else {
-                                                MaterialTheme.colorScheme.surfaceContainer
+                                                if (glassSettings != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer
                                             },
                                             contentColor = if (viewModel.isFavorited) {
                                                 Color.White.copy(alpha = 0.87f)
@@ -843,9 +848,14 @@ fun ArticleScreen(
 
                                     Button(
                                         onClick = { showComments = true },
+                                        modifier = Modifier.pressLift(
+                                            pressedScale = 1.3f,
+                                            pressedColor = MaterialTheme.colorScheme.primary,
+                                            pressedGlow = MaterialTheme.colorScheme.primary,
+                                        ),
                                         contentPadding = PaddingValues(start = 8.dp, end = 12.dp),
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                            containerColor = if (glassSettings != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
                                             contentColor = MaterialTheme.colorScheme.onSurface,
                                         ),
                                     ) {
@@ -881,7 +891,7 @@ fun ArticleScreen(
             },
         ) { innerPadding ->
             CompositionLocalProvider(LocalBringIntoViewSpec provides articleBringIntoViewSpec) {
-                Box {
+                Box(Modifier.then(pageGlassSource)) {
                     Column(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
@@ -1126,12 +1136,37 @@ fun ArticleScreen(
     val progressBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
     val progressBarBottomPadding = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 96.dp
 
+    // 一键到底按钮的滚动需要协程作用域喵。
+    val scrollToBottomScope = rememberCoroutineScope()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .testTag("article_screen_root")
             .then(answerDoubleTapModifier),
     ) {
+        // 长文时提供可拖动的一键到底按钮；位置由 DraggableRefreshButton 自己持久化喵。
+        if (effectiveScrollMaxValue > 0) {
+            DraggableRefreshButton(
+                // 根 Box 里后画的在上，必须提层，否则按钮会被正文盖住喵。
+                modifier = Modifier.zIndex(1f),
+                glassPanel = pillGlassPanel,
+                preferenceName = "fabScrollToBottom",
+                containerColor = if (glassSettings != null) Color.Transparent else null,
+                onClick = {
+                    scrollToBottomScope.launch {
+                        scrollState.animateScrollTo(scrollState.maxValue)
+                    }
+                },
+                content = {
+                    Icon(
+                        Icons.Default.VerticalAlignBottom,
+                        contentDescription = "到底部",
+                        tint = if (glassSettings != null) MaterialTheme.colorScheme.onSurface else LocalContentColor.current,
+                    )
+                },
+            )
+        }
         // 根据模式渲染
         if (article.type == ArticleType.Answer && answerSwitchMode == "vertical") {
             AnswerVerticalOverscroll(
@@ -1218,30 +1253,33 @@ fun ArticleScreen(
     }
 
     // 全屏菜单
-    ArticleActionsMenu(
-        article = article,
-        viewModel = viewModel,
-        answerQueueFallbackProvider = sharedData?.navigator?.let { answerNavigator ->
-            { limit -> answerNavigator.remainingAnswersSnapshot(article.id, limit) }
-        },
-        showMenu = showActionsMenu,
-        onDismissRequest = { showActionsMenu = false },
-        onSummaryRequest = {
-            showSummaryDialog = true
-            viewModel.requestAiSummary(environment)
-        },
-        onAigcFlagRequest = {
-            showAigcFlagSheet = true
-            viewModel.loadAigcFlagStatus(environment)
-        },
-        onExportRequest = { showExportDialog = true },
-        onSetImmersiveDoubleTap = {
-            showActionsMenu = false
-            // 沉浸式模式下，按返回键优先退出沉浸式，不会直接退出回答
-            isImmersiveMode = !isImmersiveMode
-            userMessages.showMessage("已进入沉浸式，按返回键即可退出")
-        },
-    )
+    // 更多菜单也用页面内容那一层背景，理由同上喵。
+    CompositionLocalProvider(LocalGlassBackdrop provides pageGlassBackdrop) {
+        ArticleActionsMenu(
+            article = article,
+            viewModel = viewModel,
+            answerQueueFallbackProvider = sharedData?.navigator?.let { answerNavigator ->
+                { limit -> answerNavigator.remainingAnswersSnapshot(article.id, limit) }
+            },
+            showMenu = showActionsMenu,
+            onDismissRequest = { showActionsMenu = false },
+            onSummaryRequest = {
+                showSummaryDialog = true
+                viewModel.requestAiSummary(environment)
+            },
+            onAigcFlagRequest = {
+                showAigcFlagSheet = true
+                viewModel.loadAigcFlagStatus(environment)
+            },
+            onExportRequest = { showExportDialog = true },
+            onSetImmersiveDoubleTap = {
+                showActionsMenu = false
+                // 沉浸式模式下，按返回键优先退出沉浸式，不会直接退出回答
+                isImmersiveMode = !isImmersiveMode
+                userMessages.showMessage("已进入沉浸式，按返回键即可退出")
+            },
+        )
+    }
 
     ArticleSummarySheet(
         showDialog = showSummaryDialog,
@@ -1273,27 +1311,31 @@ fun ArticleScreen(
         onSubmitRequest = { viewModel.submitAigcFlag(environment) },
     )
 
-    // 使用新的收藏夹对话框组件
-    CollectionDialogComponent(
-        showDialog = showCollectionDialog,
-        onDismiss = { showCollectionDialog = false },
-        collections = viewModel.collections,
-        onLoadCollections = { viewModel.loadCollections(environment) },
-        onToggleFavorite = { collection ->
-            viewModel.toggleFavorite(collection.id, collection.isFavorited, environment)
-        },
-        onCreateCollection = { title, description, isPublic ->
-            viewModel.createNewCollection(environment, title, description, isPublic)
-        },
-    )
+    // 弹层套的是**页面内容那一层**背景：弹层与内容 Box 并列、不在内容层内，
+    // 所以采样不会把弹层自己画进去、也就不会无限递归喵。
+    CompositionLocalProvider(LocalGlassBackdrop provides pageGlassBackdrop) {
+        // 使用新的收藏夹对话框组件
+        CollectionDialogComponent(
+            showDialog = showCollectionDialog,
+            onDismiss = { showCollectionDialog = false },
+            collections = viewModel.collections,
+            onLoadCollections = { viewModel.loadCollections(environment) },
+            onToggleFavorite = { collection ->
+                viewModel.toggleFavorite(collection.id, collection.isFavorited, environment)
+            },
+            onCreateCollection = { title, description, isPublic ->
+                viewModel.createNewCollection(environment, title, description, isPublic)
+            },
+        )
 
-    CommentScreenComponent(
-        showComments = showComments,
-        onDismiss = { showComments = false },
-        content = article,
-        isZhPlusAuthorContent = article.type == ArticleType.Answer &&
-            viewModel.authorId == DataHolder.ZH_PLUS_AUTHOR_USER_ID,
-    )
+        CommentScreenComponent(
+            showComments = showComments,
+            onDismiss = { showComments = false },
+            content = article,
+            isZhPlusAuthorContent = article.type == ArticleType.Answer &&
+                viewModel.authorId == DataHolder.ZH_PLUS_AUTHOR_USER_ID,
+        )
+    }
     VotersSheet(
         show = showVoters,
         title = "${formatCompactCount(viewModel.votersTotal)} 人赞同了该回答",

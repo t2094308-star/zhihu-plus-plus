@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -59,6 +60,10 @@ import kotlin.math.roundToInt
 fun DraggableRefreshButton(
     modifier: Modifier = Modifier,
     preferenceName: String = "fabRefresh",
+    // 传非 null 时用调用方给的颜色（例如透明 + 自己的玻璃面），并去掉 FAB 自带的阴影喵。
+    containerColor: Color? = null,
+    // 玻璃面必须加在拖动偏移**之后**，否则它不跟随按钮移动、会停在初始位置喵。
+    glassPanel: Modifier? = null,
     bottomAvoidance: Dp = 0.dp,
     initiallyOnLeft: Boolean = false,
     onClick: () -> Unit,
@@ -117,15 +122,16 @@ fun DraggableRefreshButton(
     FloatingActionButton(
         onClick = onClick,
         shape = CircleShape,
-        containerColor = FloatingActionButtonDefaults.containerColor.copy(alpha = opacityFraction),
+        containerColor = containerColor ?: FloatingActionButtonDefaults.containerColor.copy(alpha = opacityFraction),
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = opacityFraction),
-        elevation = if (opacityFraction < 1f) {
+        elevation = if (containerColor != null || opacityFraction < 1f) {
             FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
         } else {
             FloatingActionButtonDefaults.elevation()
         },
         modifier = modifier
             .offset { IntOffset(displayedOffsetX.roundToInt(), displayedOffsetY.roundToInt()) }
+            .then(glassPanel ?: Modifier)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {

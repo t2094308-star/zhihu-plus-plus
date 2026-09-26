@@ -392,7 +392,8 @@ fun SettingItem(
                     onPositioned = onPositioned,
                     bringIntoViewRequester = bringIntoViewRequester,
                     shape = shape,
-                ).clickable(
+                ).pressLift()
+                .clickable(
                     enabled = enabled,
                     onClick = onClick,
                 )

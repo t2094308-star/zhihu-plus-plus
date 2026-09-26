@@ -72,7 +72,10 @@ android {
             dimension = "version"
             isDefault = true
             buildConfigField("boolean", "IS_LITE", "true")
-            applicationIdSuffix = ".lite"
+            // 以 ".lite" 结尾是必需的：AndroidPlatformCapabilities 用 endsWith(".lite") 判断 lite 变体，
+            // 换成别的后缀会让首页错误显示 full 版才有的入口、更新检查也会指向错误的包喵。
+            // 中间多出的 ".mod" 让本地魔改版能和官方包共存，便于对比测试喵。
+            applicationIdSuffix = ".mod.lite"
 //            versionNameSuffix = "-lite"
         }
     }

@@ -24,6 +24,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ConsumeSwipeWithinBottomSheetBoundsNestedScrollConnection
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,10 +88,16 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import com.github.zly2006.zhihu.platform.PlatformBackHandler
 import com.github.zly2006.zhihu.platform.PlatformPredictiveBackHandler
 import com.github.zly2006.zhihu.platform.exportTestTagsForUiAutomation
 import com.github.zly2006.zhihu.platform.platformName
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.theme.LocalGlassBackdrop
+import com.github.zly2006.zhihu.theme.rememberGlassSurface
+import com.github.zly2006.zhihu.ui.rememberObservedSetting
+import com.github.zly2006.zhihu.ui.subscreens.PREDICTIVE_BACK_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.subscreens.rememberLiquidGlassSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -107,6 +115,11 @@ fun MyModalBottomSheet(
     sheetGesturesEnabled: Boolean = true,
     shape: Shape = BottomSheetDefaults.ExpandedShape,
     containerColor: Color = BottomSheetDefaults.ContainerColor,
+    // 非 null 时弹层表面改用玻璃，并去掉不透明底色喵。
+    glassPanel: Modifier? = null,
+    /** 展开动画的原点（相对弹层宽高，0..1）。用来实现"从按动位置长出来"喵。 */
+    expandOriginX: Float = 0.5f,
+    expandOriginY: Float = 1f,
     contentColor: Color = contentColorFor(containerColor),
     tonalElevation: Dp = 0.dp,
     scrimColor: Color = BottomSheetDefaults.ScrimColor,
@@ -123,6 +136,26 @@ fun MyModalBottomSheet(
         shape
     }
     val scope = rememberCoroutineScope()
+    // 弹层浮在页面内容之上，采样的是页面内容那一层（不含弹层自身），所以不会递归喵。
+    // 独立平台窗口的弹层采样不成立，那条路径保持原有不透明底色喵。
+    val sheetGlassPanel = if (usePlatformWindow) {
+        null
+    } else {
+        val sheetGlassBackdrop = LocalGlassBackdrop.current
+        val sheetGlassSettings = rememberLiquidGlassSettings(settings)
+        if (sheetGlassBackdrop != null && sheetGlassSettings != null) {
+            rememberGlassSurface(
+                sheetGlassBackdrop,
+                RoundedCornerShape(
+                    topStart = sheetGlassSettings.cornerDp.dp,
+                    topEnd = sheetGlassSettings.cornerDp.dp,
+                ),
+                sheetGlassSettings,
+            )
+        } else {
+            null
+        }
+    }
     val animateToDismiss: () -> Unit = {
         // 绕过 SheetState.confirmValueChange 不可见的问题，直接调用内部 anchoredDraggableState。
         if (sheetState.anchoredDraggableState.confirmValueChange.invoke(Hidden)) {
@@ -169,6 +202,9 @@ fun MyModalBottomSheet(
                 gesturesEnabled = sheetGesturesEnabled,
                 shape = bottomSheetShape,
                 containerColor = containerColor,
+                glassPanel = sheetGlassPanel,
+                expandOriginX = expandOriginX,
+                expandOriginY = expandOriginY,
                 contentColor = contentColor,
                 tonalElevation = tonalElevation,
                 dragHandle = dragHandle,
@@ -203,16 +239,25 @@ fun MyModalBottomSheet(
             )
         }
     } else {
-        PlatformPredictiveBackHandler(
-            enabled = properties.shouldDismissOnBackPress && sheetState.targetValue != Hidden,
-            onProgress = { progress ->
-                scope.launch { predictiveBackProgress.snapTo(progress) }
-            },
-            onCancel = {
-                scope.launch { predictiveBackProgress.animateTo(0f) }
-            },
-            onBack = animateToDismiss,
-        )
+        val dismissOnBackEnabled = properties.shouldDismissOnBackPress && sheetState.targetValue != Hidden
+        val predictiveBackEnabled = rememberObservedSetting(settings, PREDICTIVE_BACK_PREFERENCE_KEY) {
+            getBoolean(PREDICTIVE_BACK_PREFERENCE_KEY, true)
+        }
+        if (predictiveBackEnabled.value) {
+            PlatformPredictiveBackHandler(
+                enabled = dismissOnBackEnabled,
+                onProgress = { progress ->
+                    scope.launch { predictiveBackProgress.snapTo(progress) }
+                },
+                onCancel = {
+                    scope.launch { predictiveBackProgress.animateTo(0f) }
+                },
+                onBack = animateToDismiss,
+            )
+        } else {
+            // 关闭预测性返回时退回普通返回：立即提交关闭，不消费手势进度喵。
+            PlatformBackHandler(enabled = dismissOnBackEnabled, onBack = animateToDismiss)
+        }
         SheetContent()
     }
     if (sheetState.hasExpandedState) {
@@ -247,6 +292,11 @@ fun BottomSheet(
     },
     shape: Shape = BottomSheetDefaults.ExpandedShape,
     containerColor: Color = BottomSheetDefaults.ContainerColor,
+    // 非 null 时弹层表面改用玻璃，并去掉不透明底色喵。
+    glassPanel: Modifier? = null,
+    /** 展开动画的原点（相对弹层宽高，0..1）。用来实现"从按动位置长出来"喵。 */
+    expandOriginX: Float = 0.5f,
+    expandOriginY: Float = 1f,
     contentColor: Color = contentColorFor(containerColor),
     tonalElevation: Dp = BottomSheetDefaults.Elevation,
     shadowElevation: Dp = 0.dp,
@@ -268,6 +318,9 @@ fun BottomSheet(
     }
 
     val bottomSheetPaneTitle = getString(string = Strings.BottomSheetPaneTitle)
+    // 弹层从按动位置长出来的入场进度喵。
+    val expandProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { expandProgress.animateTo(1f, tween(320)) }
 
     Surface(
         modifier =
@@ -326,6 +379,16 @@ fun BottomSheet(
                 ).semantics {
                     paneTitle = bottomSheetPaneTitle
                     traversalIndex = 0f
+                }.graphicsLayer {
+                    // 从按动位置长出来：以按钮所在位置为缩放原点从小到大展开，
+                    // 关闭时由弹层自身的退场动画收回，符合"从哪来到哪去"喵。
+                    val enter = expandProgress.value
+                    if (enter < 1f) {
+                        transformOrigin = TransformOrigin(expandOriginX, expandOriginY)
+                        scaleX *= lerp(0.3f, 1f, enter)
+                        scaleY *= lerp(0.12f, 1f, enter)
+                        alpha = enter
+                    }
                 }.consumeWindowInsets(WindowInsets(top = state.offset.toInt().coerceAtLeast(0)))
                 .graphicsLayer {
                     val sheetOffset = state.anchoredDraggableState.offset
@@ -336,9 +399,10 @@ fun BottomSheet(
                         scaleY = calculatePredictiveBackScaleY(progress)
                         transformOrigin = TransformOrigin(0.5f, (sheetOffset + sheetHeight) / sheetHeight)
                     }
-                }.verticalScaleUp(state),
+                }.verticalScaleUp(state)
+                .then(glassPanel ?: Modifier),
         shape = shape,
-        color = containerColor,
+        color = if (glassPanel != null) Color.Transparent else containerColor,
         contentColor = contentColor,
         tonalElevation = tonalElevation,
         shadowElevation = shadowElevation,

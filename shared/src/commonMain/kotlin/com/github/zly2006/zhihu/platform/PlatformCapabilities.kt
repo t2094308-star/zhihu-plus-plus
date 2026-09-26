@@ -43,6 +43,39 @@ expect val isPageTurnSupported: Boolean
 
 expect val isAnswerSwipeSupported: Boolean
 
+/** 当前平台是否向应用交付预测性返回的手势进度；Android 13+ 才会回调进度喵。 */
+expect val isPredictiveBackSupported: Boolean
+
+/**
+ * 窗口首选的显示刷新率档位喵。
+ *
+ * [System] 表示交还系统决定，其余档位请求把窗口锁到对应的帧率喵。
+ */
+enum class DisplayFrameRateMode(
+    val preferenceValue: String,
+    val label: String,
+    val hz: Int?,
+) {
+    System("system", "跟随系统", null),
+    Fps60("60", "60 Hz", 60),
+    Fps90("90", "90 Hz", 90),
+    Fps120("120", "120 Hz", 120),
+    ;
+
+    companion object {
+        fun fromPreference(value: String?): DisplayFrameRateMode = entries.firstOrNull {
+            it.preferenceValue == value
+        } ?: System
+    }
+}
+
+/** 当前平台是否支持把窗口锁定到指定的刷新率档位；Android 11 起可用喵。 */
+expect val isDisplayFrameRateControlSupported: Boolean
+
+/** 在支持的平台上把当前窗口的渲染帧率设为 [mode]，每次进入前台重新应用喵。 */
+@Composable
+expect fun PlatformDisplayFrameRateEffect(mode: DisplayFrameRateMode)
+
 enum class UserMessageDuration {
     Short,
     Long,

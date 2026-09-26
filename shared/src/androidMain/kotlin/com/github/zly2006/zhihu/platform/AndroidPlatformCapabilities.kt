@@ -17,9 +17,11 @@
 
 package com.github.zly2006.zhihu.platform
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -30,13 +32,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.github.zly2006.zhihu.account.androidZhihuAccountStore
 import com.github.zly2006.zhihu.ui.PREFERENCE_NAME
 import com.github.zly2006.zhihu.ui.components.OpenImageDialog
+import com.github.zly2006.zhihu.util.applyDisplayFrameRate
 import com.github.zly2006.zhihu.util.clipboardManager
 import com.github.zly2006.zhihu.util.luoTianYiUrlLauncher
 import com.github.zly2006.zhihu.util.saveImageToGallery
@@ -94,6 +99,26 @@ actual val isArticleImageExportSupported: Boolean = true
 actual val isPageTurnSupported: Boolean = true
 
 actual val isAnswerSwipeSupported: Boolean = true
+
+// 预测性返回的进度回调从 Android 13 开始才可用；更早的系统只支持普通返回喵。
+actual val isPredictiveBackSupported: Boolean
+    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+// Window.setFrameRate 从 Android 11 开始提供，更早的系统没有等价的窗口级帧率请求喵。
+actual val isDisplayFrameRateControlSupported: Boolean
+    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+@Composable
+actual fun PlatformDisplayFrameRateEffect(mode: DisplayFrameRateMode) {
+    val view = LocalView.current
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // Activity 的 surface 在离开前台时会被销毁，帧率请求随之失效，所以每次回到前台都要重新应用喵。
+        LifecycleResumeEffect(mode) {
+            (view.context as? Activity)?.window?.applyDisplayFrameRate(mode)
+            onPauseOrDispose { }
+        }
+    }
+}
 
 @Composable
 actual fun rememberSystemUrlOpener(): SystemUrlOpener {

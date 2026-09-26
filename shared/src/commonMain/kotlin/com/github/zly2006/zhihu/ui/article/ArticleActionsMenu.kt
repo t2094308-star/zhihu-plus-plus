@@ -436,6 +436,8 @@ fun ArticleActionsMenu(
         MyModalBottomSheet(
             onDismissRequest = onDismissRequest,
             sheetState = sheetState,
+            // 同组合而非独立平台窗口：跨窗口采不到页面内容，做不出玻璃喵。
+            usePlatformWindow = false,
         ) {
             Column(
                 modifier = Modifier

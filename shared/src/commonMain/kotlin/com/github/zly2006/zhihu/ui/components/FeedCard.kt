@@ -56,9 +56,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -84,6 +88,7 @@ import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.ui.LocalSelectedContentDestination
+import com.github.zly2006.zhihu.ui.article.cardOpenOriginFraction
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FONT_SIZE
 import com.github.zly2006.zhihu.ui.subscreens.PREF_LINE_HEIGHT
 import com.github.zly2006.zhihu.util.parseEmphasizedHtmlTextWithTheme
@@ -118,6 +123,19 @@ fun FeedCard(
     val uriHandler = LocalUriHandler.current
     val userMessages = rememberUserMessageSink()
     val settings = rememberSettingsStore()
+    // 记住这张卡片在屏幕上的中心位置，供回答页转场做"从卡片扩散"的起点喵。
+    val windowSize = LocalWindowInfo.current.containerSize
+    var cardCenterFraction by remember { mutableStateOf<Offset?>(null) }
+    val recordCardCenter = Modifier.onGloballyPositioned { coords ->
+        if (windowSize.width > 0 && windowSize.height > 0) {
+            val position = coords.positionInRoot()
+            val size = coords.size
+            cardCenterFraction = Offset(
+                (position.x + size.width / 2f) / windowSize.width,
+                (position.y + size.height / 2f) / windowSize.height,
+            )
+        }
+    }
     val selectedDestination = LocalSelectedContentDestination.current
     var showMenu by remember { mutableStateOf(false) }
     val showFeedThumbnail = remember {
@@ -161,8 +179,13 @@ fun FeedCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { performClick(item) }
-                    .padding(horizontal = horizontalPadding, vertical = 12.dp),
+                    .pressLift()
+                    .then(recordCardCenter)
+                    .clickable {
+                        // 把卡片位置交给回答页的转场，实现"从哪来到哪去"喵。
+                        cardOpenOriginFraction = cardCenterFraction
+                        performClick(item)
+                    }.padding(horizontal = horizontalPadding, vertical = 12.dp),
             ) {
                 FeedCardContent(
                     item = item,
@@ -201,7 +224,13 @@ fun FeedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .let { if (duo3CardAppearance) it.clip(RoundedCornerShape(24.dp)) else it }
-                    .clickable { performClick(item) },
+                    .pressLift()
+                    .then(recordCardCenter)
+                    .clickable {
+                        // 把卡片位置交给回答页的转场，实现"从哪来到哪去"喵。
+                        cardOpenOriginFraction = cardCenterFraction
+                        performClick(item)
+                    },
                 elevation = if (duo3CardAppearance) {
                     CardDefaults.cardElevation()
                 } else {

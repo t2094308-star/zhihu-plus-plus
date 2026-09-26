@@ -56,11 +56,15 @@ import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Notification
 import com.github.zly2006.zhihu.notification.NotificationType
 import com.github.zly2006.zhihu.platform.isAnswerSwipeSupported
+import com.github.zly2006.zhihu.platform.isDisplayFrameRateControlSupported
 import com.github.zly2006.zhihu.platform.isPageTurnSupported
+import com.github.zly2006.zhihu.platform.isPredictiveBackSupported
 import com.github.zly2006.zhihu.platform.platformName
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.theme.isLiquidGlassSupported
 import com.github.zly2006.zhihu.ui.ANSWER_DOUBLE_TAP_ACTION_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.ARTICLE_USE_WEBVIEW_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.components.DISABLE_BOTTOM_SHEET_ROUNDED_CORNERS_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.components.SettingItem
 import com.github.zly2006.zhihu.ui.components.SettingItemGroup
@@ -186,6 +190,7 @@ private val settingsSearchEntries = buildList {
         add(appearanceEntry("appearance.pageTurnGuide", "显示翻页位置线", "标记相邻两页的重叠位置。", PREF_SHOW_PAGE_TURN_GUIDE, listOf("电纸书", "翻页", "引导线")))
         add(appearanceEntry("appearance.contentEndMarker", "显示内容结束标记", "方便电纸书用户确定内容结束。", PREF_SHOW_CONTENT_END_MARKER, listOf("电纸书", "翻页", "阅读结束", "内容末尾")))
     }
+    add(appearanceEntry("appearance.articleOpenTransition", "打开回答的上浮转场", "从列表打开回答时的上浮扩散动画与速度。", ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY, listOf("转场", "动画", "上浮", "扩散", "回答", "速度")))
     add(appearanceEntry("appearance.answerDoubleTapAction", "双击回答动作", "设置双击正文后的默认动作。", ANSWER_DOUBLE_TAP_ACTION_PREFERENCE_KEY, listOf("双击")))
     add(
         appearanceEntry(
@@ -216,7 +221,15 @@ private val settingsSearchEntries = buildList {
     add(appearanceEntry("appearance.showSearchHotSearch", "搜索界面显示热搜", "控制搜索页空查询时是否展示热搜。", "showSearchHotSearch", listOf("热搜")))
     add(appearanceEntry("appearance.showSearchHistory", "记录并显示搜索历史", "控制搜索历史记录和展示。", "showSearchHistory", listOf("搜索记录", "历史记录", "清除搜索历史")))
     add(appearanceEntry("appearance.customNavHost", "使用自定义导航", "切换实验性的导航实现。", "use_custom_nav_host"))
-    add(appearanceEntry("appearance.predictiveBack", "启用预测性返回", "控制 Android 预测性返回动画。", "enable_predictive_back", listOf("返回手势")))
+    if (isPredictiveBackSupported) {
+        add(appearanceEntry("appearance.predictiveBack", "启用预测性返回", "控制 Android 预测性返回动画。", PREDICTIVE_BACK_PREFERENCE_KEY, listOf("返回手势")))
+    }
+    if (isDisplayFrameRateControlSupported) {
+        add(appearanceEntry("appearance.displayFrameRate", "显示刷新率", "把窗口锁定到 60 / 90 / 120 Hz 或跟随系统。", DISPLAY_FRAME_RATE_PREFERENCE_KEY, listOf("高刷", "120Hz", "90Hz", "60Hz", "帧率", "刷新率")))
+    }
+    if (isLiquidGlassSupported) {
+        add(appearanceEntry("appearance.glassBottomBar", "液态玻璃", "为导航栏、回答页顶底栏、问题页顶栏和评论输入栏启用液态玻璃并调整轮廓光、模糊、圆角、折射与透明度。", APPEARANCE_SETTINGS_GLASS_SECTION_KEY, listOf("玻璃", "液态玻璃", "Liquid Glass", "底栏", "模糊", "圆角", "折射", "轮廓光")))
+    }
     add(appearanceEntry("appearance.duo3", "123Duo3 新 UI", "集中管理 Duo3 视觉和交互开关。", "123Duo3", listOf("新UI", "Duo3")))
 
     add(recommendEntry("recommend.recommendationMode", "推荐算法", "选择 Web、Android、本地或混合推荐。", "recommendationMode", listOf("推荐来源", "Web 推荐", "Android 推荐", "本地推荐", "混合推荐")))

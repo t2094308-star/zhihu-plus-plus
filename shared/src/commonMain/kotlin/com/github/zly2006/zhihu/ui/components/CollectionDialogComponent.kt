@@ -75,6 +75,8 @@ fun CollectionDialogComponent(
     if (showDialog) {
         MyModalBottomSheet(
             onDismissRequest = onDismiss,
+            // 同组合而非独立平台窗口：跨窗口采不到页面内容，就做不出玻璃喵。
+            usePlatformWindow = false,
         ) {
             Column(
                 modifier = Modifier

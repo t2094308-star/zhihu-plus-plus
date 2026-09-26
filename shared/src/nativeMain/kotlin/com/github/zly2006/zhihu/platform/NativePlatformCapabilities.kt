@@ -167,3 +167,14 @@ actual val isArticleImageExportSupported: Boolean = false
 actual val isPageTurnSupported: Boolean = false
 
 actual val isAnswerSwipeSupported: Boolean = !nativeIsDesktop
+
+// 预测性返回是 Android 独有的返回手势模型，Apple 平台没有等价能力喵。
+actual val isPredictiveBackSupported: Boolean = false
+
+// Apple 平台的呈现循环没有暴露可比的帧率请求入口，声明为不支持而不是给出低质量替代喵。
+actual val isDisplayFrameRateControlSupported: Boolean = false
+
+@Composable
+actual fun PlatformDisplayFrameRateEffect(mode: DisplayFrameRateMode) {
+    error("$platformName 暂不支持锁定显示刷新率")
+}

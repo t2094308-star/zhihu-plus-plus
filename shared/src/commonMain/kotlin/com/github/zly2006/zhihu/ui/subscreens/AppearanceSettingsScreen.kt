@@ -95,16 +95,34 @@ import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.MyCollections
 import com.github.zly2006.zhihu.navigation.OnlineHistory
 import com.github.zly2006.zhihu.navigation.TopLevelDestination
+import com.github.zly2006.zhihu.platform.DisplayFrameRateMode
+import com.github.zly2006.zhihu.platform.SettingsStore
 import com.github.zly2006.zhihu.platform.isAnswerSwipeSupported
+import com.github.zly2006.zhihu.platform.isDisplayFrameRateControlSupported
 import com.github.zly2006.zhihu.platform.isPageTurnSupported
+import com.github.zly2006.zhihu.platform.isPredictiveBackSupported
 import com.github.zly2006.zhihu.platform.platformBottomBarItemLimit
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
+import com.github.zly2006.zhihu.theme.DEFAULT_GLASS_BLUR_DP
+import com.github.zly2006.zhihu.theme.DEFAULT_GLASS_CORNER_DP
+import com.github.zly2006.zhihu.theme.DEFAULT_GLASS_HIGHLIGHT_ALPHA
+import com.github.zly2006.zhihu.theme.DEFAULT_GLASS_REFRACTION_DP
+import com.github.zly2006.zhihu.theme.DEFAULT_GLASS_SURFACE_ALPHA
+import com.github.zly2006.zhihu.theme.LiquidGlassSettings
 import com.github.zly2006.zhihu.theme.ThemeManager
 import com.github.zly2006.zhihu.theme.ThemeMode
+import com.github.zly2006.zhihu.theme.isLiquidGlassSupported
 import com.github.zly2006.zhihu.ui.ANSWER_DOUBLE_TAP_ACTION_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.ARTICLE_USE_WEBVIEW_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.AnswerDoubleTapAction
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.DEFAULT_ARTICLE_OPEN_TRANSITION_ENABLED
+import com.github.zly2006.zhihu.ui.article.DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED
+import com.github.zly2006.zhihu.ui.article.MAX_ARTICLE_OPEN_TRANSITION_SPEED
+import com.github.zly2006.zhihu.ui.article.MIN_ARTICLE_OPEN_TRANSITION_SPEED
+import com.github.zly2006.zhihu.ui.article.normalizedArticleOpenTransitionSpeed
 import com.github.zly2006.zhihu.ui.components.ANSWER_SWITCH_SENSITIVITY_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.components.ColorPickerDialog
 import com.github.zly2006.zhihu.ui.components.DEFAULT_ANSWER_SWITCH_SENSITIVITY
@@ -119,6 +137,7 @@ import com.github.zly2006.zhihu.ui.components.normalizedAnswerSwitchSensitivity
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.isLegacyWebViewSupported
+import com.github.zly2006.zhihu.ui.rememberObservedSetting
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -160,7 +179,98 @@ const val BOTTOM_BAR_ITEMS_PREFERENCE_KEY = "bottom_bar_items"
 const val BOTTOM_BAR_ITEM_ORDER_PREFERENCE_KEY = "bottom_bar_item_order"
 const val COLLECTION_DIRECT_BROWSE_PREFERENCE_KEY = "collectionDirectBrowse"
 const val LANDSCAPE_LIST_DETAIL_PREFERENCE_KEY = "landscapeListDetail"
+
+const val APPEARANCE_SETTINGS_ARTICLE_OPEN_TRANSITION_TAG = "appearanceSettings.articleOpenTransition"
+const val APPEARANCE_SETTINGS_ARTICLE_OPEN_TRANSITION_SPEED_TAG = "appearanceSettings.articleOpenTransitionSpeed"
+
+/** 预测性返回开关；控制应用自管的返回动作是否参与进度预览喵。 */
+const val PREDICTIVE_BACK_PREFERENCE_KEY = "enable_predictive_back"
+
+/** 窗口首选刷新率档位；取值来自 `DisplayFrameRateMode.preferenceValue`喵。 */
+const val DISPLAY_FRAME_RATE_PREFERENCE_KEY = "displayFrameRateMode"
+
+const val APPEARANCE_SETTINGS_DISPLAY_FRAME_RATE_TAG = "appearanceSettings.displayFrameRate"
+
+const val APPEARANCE_SETTINGS_GLASS_SECTION_KEY = "appearanceSettings.glassBottomBarSection"
+const val APPEARANCE_SETTINGS_GLASS_HIGHLIGHT_TAG = "appearanceSettings.glassBottomBar.highlight"
+const val APPEARANCE_SETTINGS_GLASS_BLUR_TAG = "appearanceSettings.glassBottomBar.blur"
+const val APPEARANCE_SETTINGS_GLASS_CORNER_TAG = "appearanceSettings.glassBottomBar.corner"
+const val APPEARANCE_SETTINGS_GLASS_REFRACTION_TAG = "appearanceSettings.glassBottomBar.refraction"
+const val APPEARANCE_SETTINGS_GLASS_SURFACE_ALPHA_TAG = "appearanceSettings.glassBottomBar.surfaceAlpha"
+const val APPEARANCE_SETTINGS_GLASS_RESET_TAG = "appearanceSettings.glassBottomBar.reset"
+
+/** 玻璃底栏总开关喵。 */
+const val GLASS_ENABLED_PREFERENCE_KEY = "glassBottomBar"
+const val GLASS_HIGHLIGHT_PREFERENCE_KEY = "glassBottomBarHighlight"
+const val GLASS_BLUR_PREFERENCE_KEY = "glassBottomBarBlurDp"
+const val GLASS_CORNER_PREFERENCE_KEY = "glassBottomBarCornerDp"
+const val GLASS_REFRACTION_PREFERENCE_KEY = "glassBottomBarRefractionDp"
+const val GLASS_SURFACE_ALPHA_PREFERENCE_KEY = "glassBottomBarSurfaceAlpha"
+
+/**
+ * 读取玻璃底栏的绘制参数喵。
+ *
+ * 总开关关闭时返回 null，调用侧据此完全跳过玻璃路径、保留原有底栏喵。
+ * Android 主壳与桌面主壳共用这一段，避免两处各写一份 key 与默认值喵。
+ */
+fun readLiquidGlassSettings(settings: SettingsStore): LiquidGlassSettings? {
+    if (!settings.getBoolean(GLASS_ENABLED_PREFERENCE_KEY, false)) return null
+    return LiquidGlassSettings(
+        highlightAlpha = settings.getFloat(
+            GLASS_HIGHLIGHT_PREFERENCE_KEY,
+            DEFAULT_GLASS_HIGHLIGHT_ALPHA,
+        ),
+        blurDp = settings.getFloat(GLASS_BLUR_PREFERENCE_KEY, DEFAULT_GLASS_BLUR_DP),
+        cornerDp = settings.getFloat(GLASS_CORNER_PREFERENCE_KEY, DEFAULT_GLASS_CORNER_DP),
+        refractionDp = settings.getFloat(
+            GLASS_REFRACTION_PREFERENCE_KEY,
+            DEFAULT_GLASS_REFRACTION_DP,
+        ),
+        surfaceAlpha = settings.getFloat(
+            GLASS_SURFACE_ALPHA_PREFERENCE_KEY,
+            DEFAULT_GLASS_SURFACE_ALPHA,
+        ),
+    )
+}
+
+/**
+ * 组合期读取玻璃参数喵。
+ *
+ * 同时观察总开关与 5 个参数键，用户在设置页调整后立刻生效；
+ * 总开关关闭或平台不支持时返回 null，调用侧据此完全跳过玻璃路径、保留原有样式喵。
+ */
+@Composable
+fun rememberLiquidGlassSettings(settings: SettingsStore): LiquidGlassSettings? {
+    val enabled = rememberObservedSetting(settings, GLASS_ENABLED_PREFERENCE_KEY) {
+        getBoolean(GLASS_ENABLED_PREFERENCE_KEY, false)
+    }
+    val highlightAlpha = rememberObservedSetting(settings, GLASS_HIGHLIGHT_PREFERENCE_KEY) {
+        getFloat(GLASS_HIGHLIGHT_PREFERENCE_KEY, DEFAULT_GLASS_HIGHLIGHT_ALPHA)
+    }
+    val blurDp = rememberObservedSetting(settings, GLASS_BLUR_PREFERENCE_KEY) {
+        getFloat(GLASS_BLUR_PREFERENCE_KEY, DEFAULT_GLASS_BLUR_DP)
+    }
+    val cornerDp = rememberObservedSetting(settings, GLASS_CORNER_PREFERENCE_KEY) {
+        getFloat(GLASS_CORNER_PREFERENCE_KEY, DEFAULT_GLASS_CORNER_DP)
+    }
+    val refractionDp = rememberObservedSetting(settings, GLASS_REFRACTION_PREFERENCE_KEY) {
+        getFloat(GLASS_REFRACTION_PREFERENCE_KEY, DEFAULT_GLASS_REFRACTION_DP)
+    }
+    val surfaceAlpha = rememberObservedSetting(settings, GLASS_SURFACE_ALPHA_PREFERENCE_KEY) {
+        getFloat(GLASS_SURFACE_ALPHA_PREFERENCE_KEY, DEFAULT_GLASS_SURFACE_ALPHA)
+    }
+    if (!isLiquidGlassSupported || !enabled.value) return null
+    return LiquidGlassSettings(
+        highlightAlpha = highlightAlpha.value,
+        blurDp = blurDp.value,
+        cornerDp = cornerDp.value,
+        refractionDp = refractionDp.value,
+        surfaceAlpha = surfaceAlpha.value,
+    )
+}
+
 private const val BOTTOM_BAR_ITEM_ORDER_SEPARATOR = ","
+
 internal val contentFontSizeLevels = (50..120 step 5).toList() + (130..200 step 10).toList()
 private val bottomBarSettingItemHeight = 64.dp
 private val bottomBarSettingItemSpacing = 4.dp
@@ -304,6 +414,7 @@ internal fun shouldShowAccountHistoryShortcut(
  * 底部导航栏相关设置会影响 [com.github.zly2006.zhihu.ui.ZhihuMain] 的主壳状态；页面退出时必须通过 [onExit]
  * 触发上层重新读取设置，而不是直接重建 NavHost。
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceSettingsScreen(
@@ -1022,6 +1133,66 @@ fun AppearanceSettingsScreen(
                     )
                 }
 
+                // 上浮扩散转场与滑动手势无关，所以放在 isAnswerSwipeSupported 的可见性判断之外喵。
+                val articleOpenTransitionEnabled = remember {
+                    mutableStateOf(
+                        settings.getBoolean(
+                            ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY,
+                            DEFAULT_ARTICLE_OPEN_TRANSITION_ENABLED,
+                        ),
+                    )
+                }
+                SettingItemWithSwitch(
+                    modifier = Modifier.testTag(APPEARANCE_SETTINGS_ARTICLE_OPEN_TRANSITION_TAG),
+                    title = { Text("打开回答的上浮转场") },
+                    description = { Text("从列表打开回答时，页面微微上浮并扩散到全屏；关闭后沿用原来的横向滑入。") },
+                    checked = articleOpenTransitionEnabled.value,
+                    onCheckedChange = {
+                        articleOpenTransitionEnabled.value = it
+                        settings.putBoolean(ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY, it)
+                    },
+                    settingKey = ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY,
+                    highlightedKey = settingKey,
+                    bringIntoViewRequester = requesterFor(ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY),
+                )
+                var articleOpenTransitionSpeed by remember {
+                    mutableStateOf(
+                        normalizedArticleOpenTransitionSpeed(
+                            settings.getFloat(
+                                ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY,
+                                DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED,
+                            ),
+                        ),
+                    )
+                }
+                AnimatedVisibility(articleOpenTransitionEnabled.value) {
+                    SettingItem(
+                        title = { Text("转场速度") },
+                        description = {
+                            Text("当前 ${(articleOpenTransitionSpeed * 10).roundToInt() / 10f}x，数值越大越快。")
+                        },
+                        settingKey = ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY,
+                        highlightedKey = settingKey,
+                        bringIntoViewRequester = requesterFor(ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY),
+                        bottomAction = {
+                            Slider(
+                                value = articleOpenTransitionSpeed,
+                                onValueChange = {
+                                    val speed = (it * 10).roundToInt() / 10f
+                                    articleOpenTransitionSpeed = speed
+                                    settings.putFloat(ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY, speed)
+                                },
+                                valueRange = MIN_ARTICLE_OPEN_TRANSITION_SPEED..MAX_ARTICLE_OPEN_TRANSITION_SPEED,
+                                steps = 14,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                                    .testTag(APPEARANCE_SETTINGS_ARTICLE_OPEN_TRANSITION_SPEED_TAG),
+                            )
+                        },
+                    )
+                }
+
                 var answerDoubleTapExpanded by remember { mutableStateOf(false) }
                 val answerDoubleTapAction = remember {
                     mutableStateOf(
@@ -1344,6 +1515,156 @@ fun AppearanceSettingsScreen(
                 )
             }
 
+            // ── 液态玻璃底栏 ─────────────────────────────────────────────────────
+            if (isLiquidGlassSupported) {
+                val glassBottomBarEnabled = remember {
+                    mutableStateOf(settings.getBoolean(GLASS_ENABLED_PREFERENCE_KEY, false))
+                }
+                SettingItemGroup(
+                    title = "液态玻璃（beta）",
+                    settingKey = APPEARANCE_SETTINGS_GLASS_SECTION_KEY,
+                    highlightedKey = settingKey,
+                    bringIntoViewRequester = requesterFor(APPEARANCE_SETTINGS_GLASS_SECTION_KEY),
+                    header = {
+                        SettingItemOverall(
+                            title = { Text("启用液态玻璃") },
+                            description = { Text("底部导航栏、回答页顶底栏、问题页顶栏与评论输入栏改用液态玻璃材质，采样并折射它们下方滚过的真实内容。") },
+                            checked = glassBottomBarEnabled.value,
+                            onCheckedChange = {
+                                glassBottomBarEnabled.value = it
+                                settings.putBoolean(GLASS_ENABLED_PREFERENCE_KEY, it)
+                            },
+                            settingKey = APPEARANCE_SETTINGS_GLASS_SECTION_KEY,
+                            highlightedKey = settingKey,
+                            bringIntoViewRequester = requesterFor(APPEARANCE_SETTINGS_GLASS_SECTION_KEY),
+                        )
+                    },
+                ) {
+                    AnimatedVisibility(glassBottomBarEnabled.value) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            var glassHighlight by remember {
+                                mutableStateOf(
+                                    settings.getFloat(
+                                        GLASS_HIGHLIGHT_PREFERENCE_KEY,
+                                        DEFAULT_GLASS_HIGHLIGHT_ALPHA,
+                                    ),
+                                )
+                            }
+                            var glassBlur by remember {
+                                mutableStateOf(
+                                    settings.getFloat(
+                                        GLASS_BLUR_PREFERENCE_KEY,
+                                        DEFAULT_GLASS_BLUR_DP,
+                                    ),
+                                )
+                            }
+                            var glassCorner by remember {
+                                mutableStateOf(
+                                    settings.getFloat(
+                                        GLASS_CORNER_PREFERENCE_KEY,
+                                        DEFAULT_GLASS_CORNER_DP,
+                                    ),
+                                )
+                            }
+                            var glassRefraction by remember {
+                                mutableStateOf(
+                                    settings.getFloat(
+                                        GLASS_REFRACTION_PREFERENCE_KEY,
+                                        DEFAULT_GLASS_REFRACTION_DP,
+                                    ),
+                                )
+                            }
+                            var glassSurfaceAlpha by remember {
+                                mutableStateOf(
+                                    settings.getFloat(
+                                        GLASS_SURFACE_ALPHA_PREFERENCE_KEY,
+                                        DEFAULT_GLASS_SURFACE_ALPHA,
+                                    ),
+                                )
+                            }
+
+                            GlassBottomBarSlider(
+                                title = "轮廓光",
+                                currentValueText = "当前 ${(glassHighlight * 100).roundToInt()}%",
+                                value = glassHighlight,
+                                onValueChange = {
+                                    glassHighlight = it
+                                    settings.putFloat(GLASS_HIGHLIGHT_PREFERENCE_KEY, it)
+                                },
+                                valueRange = 0f..1f,
+                                steps = 9,
+                                tag = APPEARANCE_SETTINGS_GLASS_HIGHLIGHT_TAG,
+                            )
+                            GlassBottomBarSlider(
+                                title = "模糊程度",
+                                currentValueText = "当前 ${glassBlur.roundToInt()} dp",
+                                value = glassBlur,
+                                onValueChange = {
+                                    glassBlur = it
+                                    settings.putFloat(GLASS_BLUR_PREFERENCE_KEY, it)
+                                },
+                                valueRange = 0f..40f,
+                                steps = 19,
+                                tag = APPEARANCE_SETTINGS_GLASS_BLUR_TAG,
+                            )
+                            GlassBottomBarSlider(
+                                title = "圆角",
+                                currentValueText = "当前 ${glassCorner.roundToInt()} dp",
+                                value = glassCorner,
+                                onValueChange = {
+                                    glassCorner = it
+                                    settings.putFloat(GLASS_CORNER_PREFERENCE_KEY, it)
+                                },
+                                valueRange = 0f..32f,
+                                steps = 15,
+                                tag = APPEARANCE_SETTINGS_GLASS_CORNER_TAG,
+                            )
+                            GlassBottomBarSlider(
+                                title = "折射强度",
+                                currentValueText = "当前 ${glassRefraction.roundToInt()} dp",
+                                value = glassRefraction,
+                                onValueChange = {
+                                    glassRefraction = it
+                                    settings.putFloat(GLASS_REFRACTION_PREFERENCE_KEY, it)
+                                },
+                                valueRange = 0f..48f,
+                                steps = 23,
+                                tag = APPEARANCE_SETTINGS_GLASS_REFRACTION_TAG,
+                            )
+                            GlassBottomBarSlider(
+                                title = "透明度",
+                                currentValueText = "当前 ${(glassSurfaceAlpha * 100).roundToInt()}%",
+                                value = glassSurfaceAlpha,
+                                onValueChange = {
+                                    glassSurfaceAlpha = it
+                                    settings.putFloat(GLASS_SURFACE_ALPHA_PREFERENCE_KEY, it)
+                                },
+                                valueRange = 0f..1f,
+                                steps = 19,
+                                tag = APPEARANCE_SETTINGS_GLASS_SURFACE_ALPHA_TAG,
+                            )
+                            SettingItem(
+                                modifier = Modifier.testTag(APPEARANCE_SETTINGS_GLASS_RESET_TAG),
+                                title = { Text("恢复官方默认") },
+                                description = { Text("只恢复上面 5 个绘制参数，不改变总开关。") },
+                                onClick = {
+                                    glassHighlight = DEFAULT_GLASS_HIGHLIGHT_ALPHA
+                                    glassBlur = DEFAULT_GLASS_BLUR_DP
+                                    glassCorner = DEFAULT_GLASS_CORNER_DP
+                                    glassRefraction = DEFAULT_GLASS_REFRACTION_DP
+                                    glassSurfaceAlpha = DEFAULT_GLASS_SURFACE_ALPHA
+                                    settings.putFloat(GLASS_HIGHLIGHT_PREFERENCE_KEY, glassHighlight)
+                                    settings.putFloat(GLASS_BLUR_PREFERENCE_KEY, glassBlur)
+                                    settings.putFloat(GLASS_CORNER_PREFERENCE_KEY, glassCorner)
+                                    settings.putFloat(GLASS_REFRACTION_PREFERENCE_KEY, glassRefraction)
+                                    settings.putFloat(GLASS_SURFACE_ALPHA_PREFERENCE_KEY, glassSurfaceAlpha)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
             if (isPageTurnSupported) {
                 SettingItemGroup(
                     title = "电纸书翻页",
@@ -1572,19 +1893,97 @@ fun AppearanceSettingsScreen(
                     bringIntoViewRequester = requesterFor("use_custom_nav_host"),
                 )
 
-                val enablePredictiveBack = remember { mutableStateOf(settings.getBoolean("enable_predictive_back", true)) }
-                SettingItemWithSwitch(
-                    title = { Text("启用预测性返回") },
-                    description = { Text("开启 Android 14+ 的预测性返回手势动画。") },
-                    checked = enablePredictiveBack.value,
-                    onCheckedChange = {
-                        enablePredictiveBack.value = it
-                        settings.putBoolean("enable_predictive_back", it)
-                    },
-                    settingKey = "enable_predictive_back",
+                if (isPredictiveBackSupported) {
+                    val enablePredictiveBack = remember {
+                        mutableStateOf(settings.getBoolean(PREDICTIVE_BACK_PREFERENCE_KEY, true))
+                    }
+                    SettingItemWithSwitch(
+                        title = { Text("启用预测性返回") },
+                        description = {
+                            Text("拖动返回手势时预览应用自管的返回动作；页面之间的转场动画由导航组件提供，不受此开关控制。")
+                        },
+                        checked = enablePredictiveBack.value,
+                        onCheckedChange = {
+                            enablePredictiveBack.value = it
+                            settings.putBoolean(PREDICTIVE_BACK_PREFERENCE_KEY, it)
+                        },
+                        settingKey = PREDICTIVE_BACK_PREFERENCE_KEY,
+                        highlightedKey = settingKey,
+                        bringIntoViewRequester = requesterFor(PREDICTIVE_BACK_PREFERENCE_KEY),
+                    )
+                }
+            }
+
+            // ── 显示与性能 ──────────────────────────────────────────────────────
+            if (isDisplayFrameRateControlSupported) {
+                SettingItemGroup(
+                    title = "显示与性能",
+                    settingKey = DISPLAY_FRAME_RATE_PREFERENCE_KEY,
                     highlightedKey = settingKey,
-                    bringIntoViewRequester = requesterFor("enable_predictive_back"),
-                )
+                    bringIntoViewRequester = requesterFor(DISPLAY_FRAME_RATE_PREFERENCE_KEY),
+                ) {
+                    var frameRateMenuExpanded by remember { mutableStateOf(false) }
+                    val frameRateMode = remember {
+                        mutableStateOf(
+                            DisplayFrameRateMode.fromPreference(
+                                settings.getString(
+                                    DISPLAY_FRAME_RATE_PREFERENCE_KEY,
+                                    DisplayFrameRateMode.System.preferenceValue,
+                                ),
+                            ),
+                        )
+                    }
+                    SettingItem(
+                        title = { Text("显示刷新率") },
+                        description = {
+                            Text("把窗口锁定到指定刷新率；高刷更跟手也更耗电，系统省电模式或厂商的智能刷新率策略可能覆盖此设置。")
+                        },
+                        endAction = {
+                            ExposedDropdownMenuBox(
+                                expanded = frameRateMenuExpanded,
+                                onExpandedChange = { frameRateMenuExpanded = it },
+                            ) {
+                                OutlinedTextField(
+                                    value = frameRateMode.value.label,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = frameRateMenuExpanded)
+                                    },
+                                    modifier = Modifier
+                                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                        .width(140.dp)
+                                        .testTag(APPEARANCE_SETTINGS_DISPLAY_FRAME_RATE_TAG),
+                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = frameRateMenuExpanded,
+                                    onDismissRequest = { frameRateMenuExpanded = false },
+                                ) {
+                                    DisplayFrameRateMode.entries.forEach { mode ->
+                                        DropdownMenuItem(
+                                            modifier = Modifier.testTag(
+                                                "appearanceSettings.displayFrameRate:option:${mode.preferenceValue}",
+                                            ),
+                                            text = { Text(mode.label) },
+                                            onClick = {
+                                                frameRateMode.value = mode
+                                                settings.putString(
+                                                    DISPLAY_FRAME_RATE_PREFERENCE_KEY,
+                                                    mode.preferenceValue,
+                                                )
+                                                frameRateMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        settingKey = DISPLAY_FRAME_RATE_PREFERENCE_KEY,
+                        highlightedKey = settingKey,
+                        bringIntoViewRequester = requesterFor(DISPLAY_FRAME_RATE_PREFERENCE_KEY),
+                    )
+                }
             }
             // ── 123duo3 UI 改进 ─────────────────────────────────────────────────
 
@@ -1791,4 +2190,37 @@ fun AppearanceSettingsScreen(
             }
         }
     }
+}
+
+/**
+ * 玻璃底栏的一个可调参数行喵。
+ *
+ * 5 个参数共用同一套标题、当前值和滑块布局，避免把同一段布局抄 5 遍喵。
+ */
+@Composable
+private fun GlassBottomBarSlider(
+    title: String,
+    currentValueText: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    tag: String,
+) {
+    SettingItem(
+        title = { Text(title) },
+        description = { Text(currentValueText) },
+        bottomAction = {
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                steps = steps,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .testTag(tag),
+            )
+        },
+    )
 }

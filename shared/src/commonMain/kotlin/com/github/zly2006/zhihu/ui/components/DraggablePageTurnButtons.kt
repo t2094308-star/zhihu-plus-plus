@@ -454,7 +454,9 @@ private suspend fun NestedScrollDispatcher.dispatchPageTurnScroll(
 fun rememberPageTurnTarget(
     scrollState: ScrollState,
     enabled: Boolean,
-    maxScrollValue: Int = scrollState.maxValue,
+    // 用 lambda 而不是值：顶栏折叠会让 maxValue 每帧变化，
+    // 在组合期读它会让整个调用方每帧重组喵。
+    maxScrollValue: () -> Int = { scrollState.maxValue },
     onPageUpAtStart: (() -> Unit)? = null,
     onPageDownAtEnd: (() -> Unit)? = null,
 ): PageTurnTarget {
@@ -474,14 +476,14 @@ fun rememberPageTurnTarget(
         try {
             when (command) {
                 PageTurnCommand.JumpToTop -> scrollState.scrollTo(0)
-                PageTurnCommand.JumpToBottom -> scrollState.scrollTo(currentMaxScrollValue)
+                PageTurnCommand.JumpToBottom -> scrollState.scrollTo(currentMaxScrollValue())
                 PageTurnCommand.PageUp,
                 PageTurnCommand.PageDown,
                 -> {
                     val reachedStart = command == PageTurnCommand.PageUp && scrollState.value <= 0
                     val reachedEnd = command == PageTurnCommand.PageDown &&
-                        currentMaxScrollValue != Int.MAX_VALUE &&
-                        scrollState.value >= currentMaxScrollValue
+                        currentMaxScrollValue() != Int.MAX_VALUE &&
+                        scrollState.value >= currentMaxScrollValue()
                     when {
                         reachedStart && currentOnPageUpAtStart != null -> currentOnPageUpAtStart?.invoke()
                         reachedEnd && currentOnPageDownAtEnd != null -> currentOnPageDownAtEnd?.invoke()

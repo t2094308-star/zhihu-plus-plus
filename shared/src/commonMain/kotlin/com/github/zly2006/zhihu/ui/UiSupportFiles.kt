@@ -47,6 +47,7 @@ import com.github.zly2006.zhihu.navigation.TopLevelDestination
 import com.github.zly2006.zhihu.platform.SettingsStore
 import com.github.zly2006.zhihu.platform.UserMessageSink
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.theme.LiquidGlassSettings
 import com.github.zly2006.zhihu.ui.subscreens.DUO3_TIQIAN_MARKDOWN_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.ArticleViewModel.CachedAnswerContent
 import com.github.zly2006.zhihu.viewmodel.ZhihuApiEnvironment
@@ -316,6 +317,16 @@ data class ZhihuMainPreferenceSnapshot(
     val autoHideBottomBar: Boolean,
     val collectionDirectBrowseEnabled: Boolean,
     val landscapeListDetailEnabled: Boolean,
+    /**
+     * 应用自管的返回动作是否参与预测性返回的进度预览喵。
+     *
+     * 页面之间的转场预览由导航组件自身提供，不受这一项控制喵。
+     */
+    val predictiveBackEnabled: Boolean,
+    /**
+     * 玻璃底栏的绘制参数；未启用或平台不支持时为 null，底栏回落到原有 Material 样式喵。
+     */
+    val glassBottomBar: LiquidGlassSettings?,
     val selectedBottomBarItemKeys: List<String>,
     val startDestination: TopLevelDestination,
 )
@@ -336,6 +347,8 @@ class ZhihuMainPreferenceState(
     val autoHideBottomBar: Boolean get() = snapshot.autoHideBottomBar
     val collectionDirectBrowseEnabled: Boolean get() = snapshot.collectionDirectBrowseEnabled
     val landscapeListDetailEnabled: Boolean get() = snapshot.landscapeListDetailEnabled
+    val predictiveBackEnabled: Boolean get() = snapshot.predictiveBackEnabled
+    val glassBottomBar: LiquidGlassSettings? get() = snapshot.glassBottomBar
     val selectedBottomBarItemKeys: List<String> get() = snapshot.selectedBottomBarItemKeys
     val startDestination: TopLevelDestination get() = snapshot.startDestination
 

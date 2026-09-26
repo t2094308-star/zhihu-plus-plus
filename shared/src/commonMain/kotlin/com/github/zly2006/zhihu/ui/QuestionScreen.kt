@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -69,6 +70,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -87,8 +89,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -103,12 +109,16 @@ import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.decodeQuestionContentDetail
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.Question
+import com.github.zly2006.zhihu.navigation.Search
 import com.github.zly2006.zhihu.navigation.Topic
 import com.github.zly2006.zhihu.navigation.WriteAnswer
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.platform.rememberZhihuWebUrlOpener
 import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
+import com.github.zly2006.zhihu.theme.LiquidGlassSettings
+import com.github.zly2006.zhihu.theme.rememberGlassBackdrop
+import com.github.zly2006.zhihu.theme.rememberGlassSurface
 import com.github.zly2006.zhihu.ui.components.CommentScreenComponent
 import com.github.zly2006.zhihu.ui.components.FeedCard
 import com.github.zly2006.zhihu.ui.components.FeedPullToRefresh
@@ -120,13 +130,18 @@ import com.github.zly2006.zhihu.ui.components.handleShareAction
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.components.rememberShareActionExecutor
+import com.github.zly2006.zhihu.ui.subscreens.rememberLiquidGlassSettings
 import com.github.zly2006.zhihu.viewmodel.ContentLoadEnvironment
 import com.github.zly2006.zhihu.viewmodel.addReadHistory
 import com.github.zly2006.zhihu.viewmodel.feed.QuestionFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.sharedArticleAnswerSwitchState
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
+
+/** 右滑进搜索允许的倾角容错：水平线 ±30°喵。 */
+private const val SWIPE_TO_SEARCH_TAN_30_DEG = 0.5774f
 
 const val QUESTION_SCREEN_LIST_TAG = "question_screen_list"
 const val QUESTION_TITLE_TAG = "question_title"
@@ -242,27 +257,72 @@ fun QuestionScreen(
         }
     }
 
+    // 玻璃面用页面自己的录制：列表内容录进 backdrop，顶栏挂在它的兄弟位置以避免自采样喵。
+    val glassSettings = rememberLiquidGlassSettings(settings)
+    val pageGlassBackdrop = if (glassSettings != null) rememberGlassBackdrop() else null
+    val pageGlassSource = pageGlassBackdrop?.source ?: Modifier
+    val questionGlassPanel = rememberGlassSurface(
+        pageGlassBackdrop,
+        RoundedCornerShape(0.dp),
+        glassSettings ?: LiquidGlassSettings(),
+    )
+    // 从右往左滑进入搜索：阈值取半屏宽，避免与列表滚动抢手势、也避免误触喵。
+    val swipeToSearchThresholdPx = LocalWindowInfo.current.containerSize.width * 0.5f
+    // 手指很难画出标准水平线，所以这里只在 Initial pass 观察、不消费事件，
+    // 抬手指时再看总位移是否落在水平线 ±30° 的锥角内，避免"画不直就永远不触发"喵。
+    val swipeToSearchModifier = Modifier.pointerInput(Unit) {
+        awaitPointerEventScope {
+            var totalX = 0f
+            var totalY = 0f
+            var tracking = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull() ?: continue
+                if (change.pressed && !tracking) {
+                    tracking = true
+                    totalX = 0f
+                    totalY = 0f
+                }
+                if (tracking) {
+                    val delta = change.positionChange()
+                    totalX += delta.x
+                    totalY += delta.y
+                }
+                if (!change.pressed && tracking) {
+                    tracking = false
+                    val withinAngleTolerance = abs(totalY) <= abs(totalX) * SWIPE_TO_SEARCH_TAN_30_DEG
+                    if (withinAngleTolerance && totalX <= -swipeToSearchThresholdPx) {
+                        navigator.onNavigate(Search(query = ""))
+                    }
+                }
+            }
+        }
+    }
+
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().then(swipeToSearchModifier),
         topBar = {
-            QuestionTopBar(
-                title = title,
-                showTitle = showTopBarTitle,
-                onNavigateBack = navigator.onNavigateBack,
-                onOpenLog = {
-                    try {
-                        openZhihuWebUrl("https://www.zhihu.com/question/${question.questionId}/log")
-                    } catch (e: Exception) {
-                        userMessages.showShortMessage("打开日志失败: ${e.message}")
-                    }
-                },
-                onShare = {
-                    if (shareText != null) {
-                        handleShareAction(question, settings, executeShareAction) { showShareDialog = true }
-                    }
-                },
-                canShare = shareText != null,
-            )
+            Box(Modifier.then(questionGlassPanel)) {
+                QuestionTopBar(
+                    title = title,
+                    showTitle = showTopBarTitle,
+                    onNavigateBack = navigator.onNavigateBack,
+                    onOpenLog = {
+                        try {
+                            openZhihuWebUrl("https://www.zhihu.com/question/${question.questionId}/log")
+                        } catch (e: Exception) {
+                            userMessages.showShortMessage("打开日志失败: ${e.message}")
+                        }
+                    },
+                    onShare = {
+                        if (shareText != null) {
+                            handleShareAction(question, settings, executeShareAction) { showShareDialog = true }
+                        }
+                    },
+                    canShare = shareText != null,
+                    glassEnabled = glassSettings != null,
+                )
+            }
         },
     ) { innerPadding ->
         FeedPullToRefresh(
@@ -276,10 +336,16 @@ fun QuestionScreen(
                 key = { it.stableKey },
                 listState = listState,
                 modifier = Modifier
-                    .padding(innerPadding)
+                    // 玻璃顶栏浮在内容之上：顶部留白挪到 contentPadding 里，
+                    // 这样列表视口占满整屏、正文会从顶栏下方滚过被玻璃采样到喵。
+                    .padding(bottom = innerPadding.calculateBottomPadding())
+                    .then(pageGlassSource)
                     .pageTurnViewportWithGuide(pageTurnTarget)
                     .testTag(QUESTION_SCREEN_LIST_TAG),
-                contentPadding = PaddingValues(bottom = readingPlayerOverlayPadding),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = readingPlayerOverlayPadding,
+                ),
                 footer = ProgressIndicatorFooter,
                 topContent = {
                     item {
@@ -371,8 +437,18 @@ private fun QuestionTopBar(
     onOpenLog: () -> Unit,
     onShare: () -> Unit,
     canShare: Boolean,
+    glassEnabled: Boolean,
 ) {
     TopAppBar(
+        // 玻璃模式下的底色交给外层的玻璃面，组件自己不能再画不透明背景喵。
+        colors = if (glassEnabled) {
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent,
+            )
+        } else {
+            TopAppBarDefaults.topAppBarColors()
+        },
         title = {
             AnimatedContent(
                 targetState = showTitle,
