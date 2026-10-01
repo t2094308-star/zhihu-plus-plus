@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -109,7 +110,7 @@ import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.decodeQuestionContentDetail
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.Question
-import com.github.zly2006.zhihu.navigation.Search
+import com.github.zly2006.zhihu.navigation.Search as SearchDestination
 import com.github.zly2006.zhihu.navigation.Topic
 import com.github.zly2006.zhihu.navigation.WriteAnswer
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
@@ -153,6 +154,7 @@ const val QUESTION_SORT_UPDATED_TAG = "question_sort_updated"
 const val QUESTION_FOLLOW_BUTTON_TAG = "question_follow_button"
 const val QUESTION_VIEW_LOG_BUTTON_TAG = "question_view_log_button"
 const val QUESTION_SHARE_BUTTON_TAG = "question_share_button"
+const val QUESTION_SEARCH_BUTTON_TAG = "question_search_button"
 const val QUESTION_WRITE_ANSWER_BUTTON_TAG = "question_write_answer_button"
 const val QUESTION_COMMENTS_BUTTON_TAG = "question_comments_button"
 private const val QUESTION_DETAIL_COLLAPSE_THRESHOLD = 100
@@ -296,7 +298,7 @@ fun QuestionScreen(
                     }
                 }
                 if (claimed && totalX <= -swipeToSearchThresholdPx) {
-                    navigator.onNavigate(Search(query = ""))
+                    navigator.onNavigate(SearchDestination(query = ""))
                 }
             }
         }
@@ -312,6 +314,7 @@ fun QuestionScreen(
                         title = title,
                         showTitle = showTopBarTitle,
                         onNavigateBack = navigator.onNavigateBack,
+                        onSearch = { navigator.onNavigate(SearchDestination(query = "")) },
                         onOpenLog = {
                             try {
                                 openZhihuWebUrl("https://www.zhihu.com/question/${question.questionId}/log")
@@ -443,6 +446,7 @@ private fun QuestionTopBar(
     onNavigateBack: () -> Unit,
     onOpenLog: () -> Unit,
     onShare: () -> Unit,
+    onSearch: () -> Unit,
     canShare: Boolean,
     glassEnabled: Boolean,
 ) {
@@ -478,6 +482,10 @@ private fun QuestionTopBar(
             }
         },
         actions = {
+            // 看问题时想搜别的东西，从这里直接进搜索页；返回后仍停在当前问题喵。
+            IconButton(onClick = onSearch, modifier = Modifier.testTag(QUESTION_SEARCH_BUTTON_TAG)) {
+                Icon(Icons.Filled.Search, contentDescription = "搜索")
+            }
             IconButton(onClick = onOpenLog, modifier = Modifier.testTag(QUESTION_VIEW_LOG_BUTTON_TAG)) {
                 Icon(Icons.Filled.History, contentDescription = "日志")
             }

@@ -21,6 +21,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FilterCenterFocus
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.GetApp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material3.ButtonDefaults
@@ -42,19 +45,27 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.ArticleType
+import com.github.zly2006.zhihu.navigation.LocalNavigator
+import com.github.zly2006.zhihu.navigation.Search
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.reading.ReadingContentType
 import com.github.zly2006.zhihu.reading.ReadingQueueItem
@@ -444,8 +455,46 @@ fun ArticleActionsMenu(
                     .fillMaxWidth()
                     .padding(16.dp),
             ) {
+                // 搜索栏放在菜单最上面：看回答时想搜别的东西，从这里直接搜；
+                // 搜索页是压栈打开的，返回后仍停在当前回答喵。
+                ArticleMenuSearchField(onDismissRequest = onDismissRequest)
                 Content()
             }
         }
     }
+}
+
+/** 回答页操作菜单顶部搜索栏的测试 tag喵。 */
+const val ARTICLE_MENU_SEARCH_FIELD_TAG = "article_menu_search_field"
+
+/**
+ * 回答页操作菜单顶部的搜索入口喵。
+ *
+ * 提交后先收起菜单再压栈打开搜索页，这样返回时会回到当前回答喵。
+ */
+@Composable
+private fun ArticleMenuSearchField(onDismissRequest: () -> Unit) {
+    val navigator = LocalNavigator.current
+    var query by remember { mutableStateOf("") }
+    OutlinedTextField(
+        value = query,
+        onValueChange = { query = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(ARTICLE_MENU_SEARCH_FIELD_TAG),
+        placeholder = { Text("搜索内容") },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(
+            onSearch = {
+                val trimmed = query.trim()
+                if (trimmed.isNotEmpty()) {
+                    onDismissRequest()
+                    navigator.onNavigate(Search(query = trimmed))
+                }
+            },
+        ),
+    )
+    Spacer(modifier = Modifier.height(8.dp))
 }
