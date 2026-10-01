@@ -557,32 +557,26 @@ fun ArticleScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp)
-                                    .padding(bottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 8.dp)
-                                    .height(36.dp),
+                                    .padding(bottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Row(
+                                    // 不再由容器画胶囊底色：容器和按钮各自带一层不透明背景会互相叠加，
+                                    // 容器量出的高度也比按钮高一截（实测约一倍）喵。
+                                    // 现在改成每个按钮各自成胶囊，和右边收藏/评论走同一套画法喵。
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        // 玻璃模式下容器不铺不透明底色，改用胶囊玻璃；投票状态由内部按钮颜色表达喵。
-                                        .then(if (glassSettings != null) pillGlassPanel else Modifier)
-                                        .background(
-                                            color = if (glassSettings != null) {
-                                                Color.Transparent
-                                            } else if (viewModel.voteUpState == VoteUpState.Neutral) {
-                                                voteUpNeutralContent().copy(alpha = 0.1f)
-                                            } else {
-                                                voteUpNeutralContent()
-                                            },
-                                        ),
-                                    horizontalArrangement = Arrangement.Start,
+                                        .then(if (glassSettings != null) pillGlassPanel else Modifier),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     when (viewModel.voteUpState) {
                                         VoteUpState.Neutral -> {
                                             Button(
                                                 onClick = { viewModel.toggleVoteUp(environment, VoteUpState.Up) },
                                                 colors = voteUpNeutralButtonColors(),
-                                                shape = RectangleShape,
+                                                shape = RoundedCornerShape(50),
+                                                // 和同排点踩按钮显式取同一高度，别依赖各自的默认值喵。
+                                                modifier = Modifier.height(ButtonDefaults.MinHeight),
                                                 contentPadding = PaddingValues(horizontal = 0.dp),
                                             ) {
                                                 Spacer(modifier = Modifier.width(4.dp))
@@ -593,7 +587,7 @@ fun ArticleScreen(
                                             Button(
                                                 onClick = { viewModel.toggleVoteUp(environment, VoteUpState.Down) },
                                                 colors = voteUpNeutralButtonColors(),
-                                                shape = RectangleShape,
+                                                shape = RoundedCornerShape(50),
                                                 modifier = Modifier.height(ButtonDefaults.MinHeight).width(ButtonDefaults.MinHeight),
                                                 contentPadding = PaddingValues(horizontal = 0.dp),
                                             ) {
@@ -605,7 +599,9 @@ fun ArticleScreen(
                                             Button(
                                                 onClick = { viewModel.toggleVoteUp(environment, VoteUpState.Neutral) },
                                                 colors = voteUpActiveButtonColors(),
-                                                shape = RectangleShape,
+                                                shape = RoundedCornerShape(50),
+                                                // 和同排点踩按钮显式取同一高度，别依赖各自的默认值喵。
+                                                modifier = Modifier.height(ButtonDefaults.MinHeight),
                                                 contentPadding = PaddingValues(horizontal = 0.dp),
                                             ) {
                                                 Spacer(modifier = Modifier.width(4.dp))
@@ -620,7 +616,7 @@ fun ArticleScreen(
                                             Button(
                                                 onClick = { viewModel.toggleVoteUp(environment, VoteUpState.Neutral) },
                                                 colors = voteUpActiveButtonColors(),
-                                                shape = RectangleShape,
+                                                shape = RoundedCornerShape(50),
                                                 modifier = Modifier.height(ButtonDefaults.MinHeight),
                                                 contentPadding = PaddingValues(horizontal = 0.dp),
                                             ) {
@@ -635,11 +631,15 @@ fun ArticleScreen(
                                 Row(horizontalArrangement = Arrangement.End) {
                                     IconButton(
                                         onClick = { showCollectionDialog = true },
-                                        modifier = Modifier.pressLift(
-                                            pressedScale = 1.3f,
-                                            pressedColor = MaterialTheme.colorScheme.primary,
-                                            pressedGlow = MaterialTheme.colorScheme.primary,
-                                        ),
+                                        modifier = Modifier
+                                            // 和同排的点赞/评论按钮取同一高度，否则 IconButton 默认 48dp 会比 40dp 的按钮高一截喵。
+                                            .height(ButtonDefaults.MinHeight)
+                                            .width(ButtonDefaults.MinHeight)
+                                            .pressLift(
+                                                pressedScale = 1.3f,
+                                                pressedColor = MaterialTheme.colorScheme.primary,
+                                                pressedGlow = MaterialTheme.colorScheme.primary,
+                                            ),
                                         colors = IconButtonDefaults.iconButtonColors(
                                             containerColor = if (viewModel.isFavorited) Color(0xFFF57C00) else MaterialTheme.colorScheme.secondaryContainer,
                                             contentColor = if (viewModel.isFavorited) Color.White else MaterialTheme.colorScheme.onSecondaryContainer,
@@ -649,11 +649,14 @@ fun ArticleScreen(
                                     }
                                     Button(
                                         onClick = { showComments = true },
-                                        modifier = Modifier.pressLift(
-                                            pressedScale = 1.3f,
-                                            pressedColor = MaterialTheme.colorScheme.primary,
-                                            pressedGlow = MaterialTheme.colorScheme.primary,
-                                        ),
+                                        modifier = Modifier
+                                            // 和收藏/点赞显式取同一高度，别依赖各自的默认值喵。
+                                            .height(ButtonDefaults.MinHeight)
+                                            .pressLift(
+                                                pressedScale = 1.3f,
+                                                pressedColor = MaterialTheme.colorScheme.primary,
+                                                pressedGlow = MaterialTheme.colorScheme.primary,
+                                            ),
                                         contentPadding = PaddingValues(start = 8.dp, end = 12.dp),
                                         colors = voteUpNeutralButtonColors(),
                                     ) {
@@ -693,8 +696,8 @@ fun ArticleScreen(
                                 Row(
                                     modifier = Modifier
                                         // 玻璃模式下容器不铺不透明底色，改用胶囊玻璃；投票状态由内部按钮颜色表达喵。
-                                        .then(if (glassSettings != null) pillGlassPanel else Modifier)
-                                        .padding(16.dp),
+                                        // 这里不再留 16dp 内边距：上下一垫容器就比右边收藏/评论高出近一倍喵。
+                                        .then(if (glassSettings != null) pillGlassPanel else Modifier),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     AnimatedVisibility(
@@ -804,11 +807,15 @@ fun ArticleScreen(
                                 ) {
                                     IconButton(
                                         onClick = { showCollectionDialog = true },
-                                        modifier = Modifier.pressLift(
-                                            pressedScale = 1.3f,
-                                            pressedColor = MaterialTheme.colorScheme.primary,
-                                            pressedGlow = MaterialTheme.colorScheme.primary,
-                                        ),
+                                        modifier = Modifier
+                                            // 和同排的点赞/评论按钮取同一高度，否则 IconButton 默认 48dp 会比 40dp 的按钮高一截喵。
+                                            .height(ButtonDefaults.MinHeight)
+                                            .width(ButtonDefaults.MinHeight)
+                                            .pressLift(
+                                                pressedScale = 1.3f,
+                                                pressedColor = MaterialTheme.colorScheme.primary,
+                                                pressedGlow = MaterialTheme.colorScheme.primary,
+                                            ),
                                         colors = IconButtonDefaults.iconButtonColors(
                                             containerColor = if (viewModel.isFavorited) {
                                                 Color(0xFFF57C00).harmonize(MaterialTheme.colorScheme.primary)
@@ -837,6 +844,10 @@ fun ArticleScreen(
                                                 userMessages.showMessage("已停止朗读")
                                             },
                                             enabled = ttsState !in listOf(TtsState.Error, TtsState.Uninitialized, TtsState.Initializing),
+                                            // 和同排按钮显式取同一高度，否则 IconButton 默认 48dp 会高出一截喵。
+                                            modifier = Modifier
+                                                .height(ButtonDefaults.MinHeight)
+                                                .width(ButtonDefaults.MinHeight),
                                             colors = IconButtonDefaults.iconButtonColors(
                                                 containerColor = Color(0xFF4CAF50).harmonize(MaterialTheme.colorScheme.primary),
                                                 contentColor = Color.White,
@@ -848,11 +859,14 @@ fun ArticleScreen(
 
                                     Button(
                                         onClick = { showComments = true },
-                                        modifier = Modifier.pressLift(
-                                            pressedScale = 1.3f,
-                                            pressedColor = MaterialTheme.colorScheme.primary,
-                                            pressedGlow = MaterialTheme.colorScheme.primary,
-                                        ),
+                                        modifier = Modifier
+                                            // 和收藏/点赞显式取同一高度，别依赖各自的默认值喵。
+                                            .height(ButtonDefaults.MinHeight)
+                                            .pressLift(
+                                                pressedScale = 1.3f,
+                                                pressedColor = MaterialTheme.colorScheme.primary,
+                                                pressedGlow = MaterialTheme.colorScheme.primary,
+                                            ),
                                         contentPadding = PaddingValues(start = 8.dp, end = 12.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (glassSettings != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
