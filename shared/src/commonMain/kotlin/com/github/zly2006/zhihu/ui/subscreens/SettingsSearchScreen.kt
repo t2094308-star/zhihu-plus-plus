@@ -120,6 +120,22 @@ private fun appearanceEntry(
     keywords = keywords,
 )
 
+/** 测试版 UI 改造页的搜索条目；这几个设置还会继续调整，所以单独归一类喵。 */
+private fun experimentalUiEntry(
+    id: String,
+    title: String,
+    description: String,
+    settingKey: String,
+    keywords: List<String> = emptyList(),
+): SettingsSearchEntry = SettingsSearchEntry(
+    id = id,
+    title = title,
+    section = "测试版 UI 改造",
+    description = description,
+    destination = Account.ExperimentalUiSettings(setting = settingKey),
+    keywords = keywords,
+)
+
 private fun recommendEntry(
     id: String,
     title: String,
@@ -190,7 +206,7 @@ private val settingsSearchEntries = buildList {
         add(appearanceEntry("appearance.pageTurnGuide", "显示翻页位置线", "标记相邻两页的重叠位置。", PREF_SHOW_PAGE_TURN_GUIDE, listOf("电纸书", "翻页", "引导线")))
         add(appearanceEntry("appearance.contentEndMarker", "显示内容结束标记", "方便电纸书用户确定内容结束。", PREF_SHOW_CONTENT_END_MARKER, listOf("电纸书", "翻页", "阅读结束", "内容末尾")))
     }
-    add(appearanceEntry("appearance.articleOpenTransition", "打开回答的上浮转场", "从列表打开回答时的上浮扩散动画与速度。", ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY, listOf("转场", "动画", "上浮", "扩散", "回答", "速度")))
+    add(experimentalUiEntry("appearance.articleOpenTransition", "打开回答的上浮转场", "从列表打开回答时的上浮扩散动画与速度。", ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY, listOf("转场", "动画", "上浮", "扩散", "回答", "速度")))
     add(appearanceEntry("appearance.answerDoubleTapAction", "双击回答动作", "设置双击正文后的默认动作。", ANSWER_DOUBLE_TAP_ACTION_PREFERENCE_KEY, listOf("双击")))
     add(
         appearanceEntry(
@@ -228,7 +244,7 @@ private val settingsSearchEntries = buildList {
         add(appearanceEntry("appearance.displayFrameRate", "显示刷新率", "把窗口锁定到 60 / 90 / 120 Hz 或跟随系统。", DISPLAY_FRAME_RATE_PREFERENCE_KEY, listOf("高刷", "120Hz", "90Hz", "60Hz", "帧率", "刷新率")))
     }
     if (isLiquidGlassSupported) {
-        add(appearanceEntry("appearance.glassBottomBar", "液态玻璃", "为导航栏、回答页顶底栏、问题页顶栏和评论输入栏启用液态玻璃并调整轮廓光、模糊、圆角、折射与透明度。", APPEARANCE_SETTINGS_GLASS_SECTION_KEY, listOf("玻璃", "液态玻璃", "Liquid Glass", "底栏", "模糊", "圆角", "折射", "轮廓光")))
+        add(experimentalUiEntry("appearance.glassBottomBar", "液态玻璃", "为导航栏、回答页顶底栏、问题页顶栏和评论输入栏启用液态玻璃并调整轮廓光、模糊、圆角、折射与透明度。", APPEARANCE_SETTINGS_GLASS_SECTION_KEY, listOf("玻璃", "液态玻璃", "Liquid Glass", "底栏", "模糊", "圆角", "折射", "轮廓光")))
     }
     add(appearanceEntry("appearance.duo3", "123Duo3 新 UI", "集中管理 Duo3 视觉和交互开关。", "123Duo3", listOf("新UI", "Duo3")))
 

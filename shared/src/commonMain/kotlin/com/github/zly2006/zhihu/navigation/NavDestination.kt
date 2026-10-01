@@ -126,6 +126,12 @@ data object Account : TopLevelDestination {
         val setting: String = "",
     ) : NavDestination
 
+    /** 试验性界面改造的设置页：液态玻璃、转场动画、返回预览与刷新率等喵。 */
+    @Serializable
+    data class ExperimentalUiSettings(
+        val setting: String = "",
+    ) : NavDestination
+
     @Serializable
     data object ReadingSettings : NavDestination
 

@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwitchAccount
@@ -122,6 +123,7 @@ const val ACCOUNT_SETTINGS_SHORTCUT_SUBSCRIPTIONS_TAG = "accountSettings.shortcu
 const val ACCOUNT_SETTINGS_SHORTCUT_NOTIFICATION_TAG = "accountSettings.shortcutNotification"
 const val ACCOUNT_SETTINGS_SHORTCUT_HISTORY_TAG = "accountSettings.shortcutHistory"
 const val ACCOUNT_SETTINGS_APPEARANCE_TAG = "accountSettings.appearance"
+const val ACCOUNT_SETTINGS_EXPERIMENTAL_UI_TAG = "accountSettings.experimentalUi"
 const val ACCOUNT_SETTINGS_READING_TAG = "accountSettings.reading"
 const val ACCOUNT_SETTINGS_RECOMMEND_TAG = "accountSettings.recommend"
 const val ACCOUNT_SETTINGS_SEARCH_TAG = "accountSettings.search"
@@ -492,6 +494,14 @@ fun AccountSettingScreen(
                     icon = { Icon(Icons.Default.Palette, null) },
                     modifier = Modifier.testTag(ACCOUNT_SETTINGS_APPEARANCE_TAG),
                     onClick = { navigator.onNavigate(Account.AppearanceSettings()) },
+                )
+
+                SettingItem(
+                    title = { Text("测试版 UI 改造") },
+                    description = { Text("液态玻璃、转场动画等试验性界面改动") },
+                    icon = { Icon(Icons.Default.Science, null) },
+                    modifier = Modifier.testTag(ACCOUNT_SETTINGS_EXPERIMENTAL_UI_TAG),
+                    onClick = { navigator.onNavigate(Account.ExperimentalUiSettings()) },
                 )
 
                 if (readingPlayerSupported) {
