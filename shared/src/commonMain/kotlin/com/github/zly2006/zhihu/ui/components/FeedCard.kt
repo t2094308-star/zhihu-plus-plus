@@ -56,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -88,7 +87,8 @@ import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.ui.LocalSelectedContentDestination
-import com.github.zly2006.zhihu.ui.article.cardOpenOriginFraction
+import com.github.zly2006.zhihu.ui.article.CardOpenGeometry
+import com.github.zly2006.zhihu.ui.article.cardOpenGeometry
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FONT_SIZE
 import com.github.zly2006.zhihu.ui.subscreens.PREF_LINE_HEIGHT
 import com.github.zly2006.zhihu.util.parseEmphasizedHtmlTextWithTheme
@@ -125,14 +125,15 @@ fun FeedCard(
     val settings = rememberSettingsStore()
     // 记住这张卡片在屏幕上的中心位置，供回答页转场做"从卡片扩散"的起点喵。
     val windowSize = LocalWindowInfo.current.containerSize
-    var cardCenterFraction by remember { mutableStateOf<Offset?>(null) }
-    val recordCardCenter = Modifier.onGloballyPositioned { coords ->
+    var cardGeometry by remember { mutableStateOf<CardOpenGeometry?>(null) }
+    val recordCardGeometry = Modifier.onGloballyPositioned { coords ->
         if (windowSize.width > 0 && windowSize.height > 0) {
             val position = coords.positionInRoot()
             val size = coords.size
-            cardCenterFraction = Offset(
-                (position.x + size.width / 2f) / windowSize.width,
-                (position.y + size.height / 2f) / windowSize.height,
+            // 除了纵向位置，还要把卡片高度比例交出去：回答页的展开转场拿它定起始裁切窗口喵。
+            cardGeometry = CardOpenGeometry(
+                centerY = (position.y + size.height / 2f) / windowSize.height,
+                heightFraction = size.height.toFloat() / windowSize.height,
             )
         }
     }
@@ -180,10 +181,10 @@ fun FeedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .pressLift()
-                    .then(recordCardCenter)
+                    .then(recordCardGeometry)
                     .clickable {
-                        // 把卡片位置交给回答页的转场，实现"从哪来到哪去"喵。
-                        cardOpenOriginFraction = cardCenterFraction
+                        // 把卡片几何交给回答页的转场，实现"从哪来到哪去"喵。
+                        cardOpenGeometry = cardGeometry
                         performClick(item)
                     }.padding(horizontal = horizontalPadding, vertical = 12.dp),
             ) {
@@ -225,10 +226,10 @@ fun FeedCard(
                     .fillMaxWidth()
                     .let { if (duo3CardAppearance) it.clip(RoundedCornerShape(24.dp)) else it }
                     .pressLift()
-                    .then(recordCardCenter)
+                    .then(recordCardGeometry)
                     .clickable {
-                        // 把卡片位置交给回答页的转场，实现"从哪来到哪去"喵。
-                        cardOpenOriginFraction = cardCenterFraction
+                        // 把卡片几何交给回答页的转场，实现"从哪来到哪去"喵。
+                        cardOpenGeometry = cardGeometry
                         performClick(item)
                     },
                 elevation = if (duo3CardAppearance) {

@@ -80,7 +80,17 @@ fun AndroidZhihuMain(navController: NavHostController) {
             )
         },
         articleExitTransition = {
-            resolveArticleExitTransition(sharedArticleAnswerSwitchState.answerTransitionDirection)
+            // 退出的反向裁切由页面自己播（CardOpenTransition 的 exiting）喵。
+            // 这里只负责把页面留够同样的时长，别让它半路被销毁喵。
+            resolveArticleExitTransition(
+                sharedArticleAnswerSwitchState.answerTransitionDirection,
+                articleOpenTransitionDurationMillis(
+                    settings.getFloat(
+                        ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY,
+                        DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED,
+                    ),
+                ),
+            )
         },
         articleContent = { article, navEntry ->
             val viewModel: ArticleViewModel = viewModel(navEntry) {

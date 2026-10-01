@@ -148,6 +148,12 @@ import com.github.zly2006.zhihu.reading.saveReadingPlaybackSpeed
 import com.github.zly2006.zhihu.theme.LocalGlassBackdrop
 import com.github.zly2006.zhihu.theme.isLiquidGlassSupported
 import com.github.zly2006.zhihu.theme.rememberGlassBackdrop
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.article.CardOpenTransition
+import com.github.zly2006.zhihu.ui.article.DEFAULT_ARTICLE_OPEN_TRANSITION_ENABLED
+import com.github.zly2006.zhihu.ui.article.DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED
+import com.github.zly2006.zhihu.ui.article.articleOpenTransitionDurationMillis
 import com.github.zly2006.zhihu.ui.components.CompactReadingPlayerButton
 import com.github.zly2006.zhihu.ui.components.LiquidNavigationBar
 import com.github.zly2006.zhihu.ui.components.LiquidNavigationItem
@@ -159,6 +165,7 @@ import com.github.zly2006.zhihu.ui.subscreens.BlockedFeedHistoryScreen
 import com.github.zly2006.zhihu.ui.subscreens.ColorSchemeScreen
 import com.github.zly2006.zhihu.ui.subscreens.ContentFilterSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.DeveloperSettingsScreen
+import com.github.zly2006.zhihu.ui.subscreens.ExperimentalUiSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.IdentityManagementScreen
 import com.github.zly2006.zhihu.ui.subscreens.OpenSourceLicensesScreen
 import com.github.zly2006.zhihu.ui.subscreens.ReadingSettingsScreen
@@ -255,6 +262,17 @@ fun ZhihuMain(
     val readingPlayer = rememberReadingPlayerController()
     val readingPlayerState by readingPlayer.state
     val settings = rememberSettingsStore()
+    // 打开回答时的"从卡片展开"转场：这里读一次参数，两处 Article 路由共用喵。
+    val articleOpenTransitionEnabled = settings.getBoolean(
+        ARTICLE_OPEN_TRANSITION_ENABLED_PREFERENCE_KEY,
+        DEFAULT_ARTICLE_OPEN_TRANSITION_ENABLED,
+    )
+    val articleOpenTransitionMillis = articleOpenTransitionDurationMillis(
+        settings.getFloat(
+            ARTICLE_OPEN_TRANSITION_SPEED_PREFERENCE_KEY,
+            DEFAULT_ARTICLE_OPEN_TRANSITION_SPEED,
+        ),
+    )
 
     /** 右侧详情独立持有返回栈；栏内导航保留上级，从左侧重新选项时清空。 */
     val paneStateHolder = rememberSaveableStateHolder()
@@ -571,10 +589,31 @@ fun ZhihuMain(
                     exitTransition = articleExitTransition,
                     popExitTransition = articleExitTransition,
                 ) { entry ->
-                    articleContent(entry.toRoute(), entry)
+                    // 本页一旦不再是当前栈项就说明正在退出，交给容器反向播裁切喵。
+                    // currentBackStackEntry 不是 State，直接读它不会触发重组；
+                    // 必须走 currentBackStackEntryAsState 才能在退出时把 exiting 翻起来喵。
+                    val currentEntry by navController.currentBackStackEntryAsState()
+                    val isCurrentEntry = currentEntry?.id == entry.id
+                    CardOpenTransition(
+                        enabled = articleOpenTransitionEnabled,
+                        durationMillis = articleOpenTransitionMillis,
+                        exiting = !isCurrentEntry,
+                    ) {
+                        articleContent(entry.toRoute(), entry)
+                    }
                 }
                 composable<Pin> { entry ->
-                    PinScreen(entry.toRoute())
+                    // currentBackStackEntry 不是 State，直接读它不会触发重组；
+                    // 必须走 currentBackStackEntryAsState 才能在退出时把 exiting 翻起来喵。
+                    val currentEntry by navController.currentBackStackEntryAsState()
+                    val isCurrentEntry = currentEntry?.id == entry.id
+                    CardOpenTransition(
+                        enabled = articleOpenTransitionEnabled,
+                        durationMillis = articleOpenTransitionMillis,
+                        exiting = !isCurrentEntry,
+                    ) {
+                        PinScreen(entry.toRoute())
+                    }
                 }
                 accountSettings(reloadBottomBarPreferences, blocklistSettingsNlpContent)
             }
@@ -766,7 +805,19 @@ fun ZhihuMain(
                                 slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
                             },
                         ) {
-                            composable<MainTabs> {
+                            composable<MainTabs>(
+                                // 打开回答/想法时让主页原地待到展开结束喵。
+                                // 默认退出动画几百毫秒就把主页移走，而裁切展开要更久，
+                                // 后半程裁切线外露出的就不再是主页卡片和搜索框，而是一片白底喵。
+                                // targetScale 只缩 0.1%（约 2.8px，肉眼不可见）：必须与起始值不同，
+                                // 否则 Compose 判定动画无需执行、立即完成，主页会被瞬间移走喵。
+                                exitTransition = {
+                                    scaleOut(
+                                        targetScale = 0.999f,
+                                        animationSpec = tween(articleOpenTransitionMillis),
+                                    )
+                                },
+                            ) {
                                 MainTabsPager(
                                     pagerState = mainPagerState,
                                     pages = mainTabPages,
@@ -805,8 +856,21 @@ fun ZhihuMain(
                                 popExitTransition = articleExitTransition,
                             ) { navEntry ->
                                 val article: Article = navEntry.toRoute()
+                                // 本页一旦不再是当前栈项就说明正在退出，交给容器反向播裁切喵。
+                                // currentBackStackEntry 不是 State，直接读它不会触发重组；
+                                // 必须走 currentBackStackEntryAsState 才能在退出时把 exiting 翻起来喵。
+                                val currentEntry by navController.currentBackStackEntryAsState()
+                                val isCurrentEntry = currentEntry?.id == navEntry.id
                                 // 启用自适应导航时由 effect 转交详情栈，不创建会抢先消费一次性交接数据的临时页面。
-                                if (!enableLandscapeListDetail) articleContent(article, navEntry)
+                                if (!enableLandscapeListDetail) {
+                                    CardOpenTransition(
+                                        enabled = articleOpenTransitionEnabled,
+                                        durationMillis = articleOpenTransitionMillis,
+                                        exiting = !isCurrentEntry,
+                                    ) {
+                                        articleContent(article, navEntry)
+                                    }
+                                }
                             }
                             composable<HotList> {
                                 HotListScreen(innerPadding)
@@ -876,7 +940,19 @@ fun ZhihuMain(
                             }
                             composable<Pin> { navEntry ->
                                 val pin: Pin = navEntry.toRoute()
-                                if (!enableLandscapeListDetail) PinScreen(pin)
+                                // currentBackStackEntry 不是 State，直接读它不会触发重组；
+                                // 必须走 currentBackStackEntryAsState 才能在退出时把 exiting 翻起来喵。
+                                val currentEntry by navController.currentBackStackEntryAsState()
+                                val isCurrentEntry = currentEntry?.id == navEntry.id
+                                if (!enableLandscapeListDetail) {
+                                    CardOpenTransition(
+                                        enabled = articleOpenTransitionEnabled,
+                                        durationMillis = articleOpenTransitionMillis,
+                                        exiting = !isCurrentEntry,
+                                    ) {
+                                        PinScreen(pin)
+                                    }
+                                }
                             }
                             accountSettings(reloadBottomBarPreferences, blocklistSettingsNlpContent)
                             composable<Notification> {
@@ -1172,6 +1248,13 @@ private fun NavGraphBuilder.accountSettings(
     composable<Account.AppearanceSettings> { entry ->
         val args = entry.toRoute<Account.AppearanceSettings>()
         AppearanceSettingsScreen(
+            setting = args.setting,
+            onExit = reloadPreferences,
+        )
+    }
+    composable<Account.ExperimentalUiSettings> { entry ->
+        val args = entry.toRoute<Account.ExperimentalUiSettings>()
+        ExperimentalUiSettingsScreen(
             setting = args.setting,
             onExit = reloadPreferences,
         )
